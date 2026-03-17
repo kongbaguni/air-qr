@@ -1,28 +1,31 @@
 <template>
-  <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js App"/>
+  <div id="app" class="min-h-screen bg-gray-50">
+    <NavTabs :tabs="navTabs" />
+    <main class="pb-8">
+      <router-view />
+    </main>
   </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
+import NavTabs from '@/components/common/NavTabs.vue'
 
 export default {
   name: 'App',
-  components: {
-    HelloWorld
+  components: { NavTabs },
+  data() {
+    return {
+      navTabs: [
+        { path: '/shadow-download', label: '데이터' },
+        { path: '/shadow-routine-check', label: '평상점검' },
+        { path: '/shadow-performance-check', label: '성능점검' },
+        { path: '/shadow-performance-verification', label: '성능확인' }
+      ]
+    }
   }
 }
 </script>
 
 <style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
-}
+@import './assets/styles/main.css';
 </style>
