@@ -19,8 +19,29 @@
 <script>
 export default {
   name: 'ScrollTopButton',
+  props: {
+    scrollContainer: {
+      type: String,
+      default: ''
+    }
+  },
   methods: {
     scrollToTop: function () {
+      var container = null
+
+      if (this.scrollContainer && typeof document !== 'undefined') {
+        container = document.querySelector(this.scrollContainer)
+      }
+
+      if (container) {
+        if (typeof container.scrollTo === 'function') {
+          container.scrollTo({ top: 0, behavior: 'smooth' })
+        } else {
+          container.scrollTop = 0
+        }
+        return
+      }
+
       if (typeof window !== 'undefined') {
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }

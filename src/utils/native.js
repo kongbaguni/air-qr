@@ -1,5 +1,31 @@
+function isIOS() {
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  )
+}
+
 function isAndroid() {
   return /android/i.test(navigator.userAgent)
+}
+
+function isNativeBridgeAvailable() {
+  if (isIOS()) {
+    return !!(
+      window.webkit &&
+      window.webkit.messageHandlers &&
+      window.webkit.messageHandlers.callInterface
+    )
+  }
+
+  if (isAndroid()) {
+    return !!(
+      window.androidSpecForNativeInterface &&
+      window.androidSpecForNativeInterface.callInterface
+    )
+  }
+
+  return false
 }
 
 function callNative(handlerName, callBackFuncStr, payload) {
@@ -10,6 +36,19 @@ function callNative(handlerName, callBackFuncStr, payload) {
   }
 
   try {
+    if (isIOS()) {
+      if (
+        window.webkit &&
+        window.webkit.messageHandlers &&
+        window.webkit.messageHandlers.callInterface
+      ) {
+        window.webkit.messageHandlers.callInterface.postMessage(param)
+      } else {
+        console.warn('iOS handler not found: ' + handlerName)
+      }
+      return
+    }
+
     if (isAndroid()) {
       if (
         window.androidSpecForNativeInterface &&
@@ -19,40 +58,60 @@ function callNative(handlerName, callBackFuncStr, payload) {
       } else {
         console.warn('Android handler not found: ' + handlerName)
       }
-    } else {
-      console.warn('Unknown platform or running in browser')
+      return
     }
+
+    console.warn('Unknown platform or running in browser: ' + handlerName)
   } catch (e) {
     console.error('Native call error:', e)
   }
 }
 
-function promptCamera(callback) {
-  callNative('promptCamera', callback)
+function isNativeSuccess(result) {
+  if (!result || typeof result !== 'object') return true
+  if (Object.prototype.hasOwnProperty.call(result, 'isSucess')) {
+    return !!result.isSucess
+  }
+  if (Object.prototype.hasOwnProperty.call(result, 'isSuccess')) {
+    return !!result.isSuccess
+  }
+  return true
 }
 
-function takePicture(callback, maxSize) {
-  callNative('takePicture', callback, { maxSize: maxSize || 1024 })
+function extractResponsePayload(result) {
+  if (result == null) return null
+  if (typeof result === 'object' && Object.prototype.hasOwnProperty.call(result, 'responsePayload')) {
+    return result.responsePayload
+  }
+  return result
 }
 
-function promptGps(callback) {
-  callNative('promptGps', callback)
+function qrScan(callback, title) {
+  callNative('qrScan', callback, title != null ? { title: title } : {})
 }
 
-function getCurrentGpsPoint(callback) {
-  callNative('getCurrentGpsPoint', callback)
+function saveQRData(author, payload, callback) {
+  callNative(
+    'saveQRData',
+    callback || '',
+    Object.assign({ author: author || '' }, payload || {})
+  )
 }
 
-function getAppVersion(callback) {
-  callNative('getAppVersion', callback)
+function deleteQRData(author, payload, callback) {
+  callNative(
+    'deleteQRData',
+    callback || '',
+    Object.assign({ author: author || '' }, payload || {})
+  )
 }
 
-function setString(key, value) {
-  callNative('setString', '', { key: key, value: value })
-}
-
-function getString(key, callback) {
-  callNative('getString', callback, { key: key })
+function loadQRData(author, payload, callback) {
+  callNative(
+    'loadQRData',
+    callback || '',
+    Object.assign({ author: author || '' }, payload || {})
+  )
 }
 
 function vibrate(time) {
@@ -63,59 +122,17 @@ function fixWebViewTextZoom() {
   callNative('setTextZoom', '', { zoom: 100 })
 }
 
-function qrScan(callback, title) {
-  callNative('qrScan', callback, title != null ? { title: title } : {})
-}
-
-function barcodeScan(callback, title) {
-  callNative('barcodeScan', callback, title != null ? { title: title } : {})
-}
-
-// 문서(Article) API - jsInterface 스펙 (json은 객체 전달 시 자동 문자열화)
-function createArticle(type, json, callback) {
-  var payload = { type: type, json: typeof json === 'string' ? json : JSON.stringify(json || {}) }
-  callNative('createArticle', callback || '', payload)
-}
-
-function editArticle(id, json, callback) {
-  var payload = { id: id, json: typeof json === 'string' ? json : JSON.stringify(json || {}) }
-  callNative('editArticle', callback || '', payload)
-}
-
-function getArticleList(type, callback) {
-  callNative('getArticleList', callback || '', { type: type })
-}
-
-function getArticle(id, callback) {
-  callNative('getArticle', callback || '', { id: id })
-}
-
-function deleteArticleById(id, callback) {
-  callNative('deleteArticleById', callback || '', { id: id })
-}
-
-function deleteArticlesByType(type, callback) {
-  callNative('deleteArticlesByType', callback || '', { type: type })
-}
-
 export {
+  isIOS,
   isAndroid,
+  isNativeBridgeAvailable,
   callNative,
-  promptCamera,
-  takePicture,
-  promptGps,
-  getCurrentGpsPoint,
-  getAppVersion,
-  setString,
-  getString,
-  vibrate,
-  fixWebViewTextZoom,
+  isNativeSuccess,
+  extractResponsePayload,
   qrScan,
-  barcodeScan,
-  createArticle,
-  editArticle,
-  getArticleList,
-  getArticle,
-  deleteArticleById,
-  deleteArticlesByType
+  saveQRData,
+  deleteQRData,
+  loadQRData,
+  vibrate,
+  fixWebViewTextZoom
 }

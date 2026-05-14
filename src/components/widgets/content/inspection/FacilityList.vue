@@ -81,6 +81,7 @@ import FacilityItem from './FacilityItem.vue'
 import InspectionDetailModal from './InspectionDetailModal.vue'
 import InspectionForm from './InspectionForm.vue'
 import RoutineCheckCompletedDetailModal from './RoutineCheckCompletedDetailModal.vue'
+import { modalAlert } from '@/utils/modalAlert'
 
 export default {
   name: 'FacilityList',
@@ -248,11 +249,11 @@ export default {
     },
     handleSubmit: function (formData) {
       if (this.checkedFacilities.length === 0) {
-        alert('1개 이상 점검항목을 선택해주세요.')
+        modalAlert('1개 이상 점검항목을 선택해주세요.')
         return
       }
       if (!this.localStatusFilter) {
-        alert('상태(이상없음/조치필요/미해당)를 선택해주세요.')
+        modalAlert('상태(이상없음/조치필요/미해당)를 선택해주세요.')
         return
       }
       var self = this

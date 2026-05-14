@@ -10,7 +10,7 @@
         :class="[
           'px-5 py-2 text-sm font-semibold rounded-full transition-all',
           selectedTab === 'scheduled'
-            ? 'bg-gradient-to-r from-blue-400 to-blue-600 text-white shadow-sm'
+            ? 'bg-blue-600 text-white shadow-sm'
             : 'bg-transparent text-gray-500 hover:bg-gray-100'
         ]"
         @click="$emit('select', 'scheduled')"
@@ -21,7 +21,7 @@
         :class="[
           'px-5 py-2 text-sm font-semibold rounded-full transition-all',
           selectedTab === 'inProgress'
-            ? 'bg-gradient-to-r from-blue-400 to-blue-600 text-white shadow-sm'
+            ? 'bg-blue-600 text-white shadow-sm'
             : 'bg-transparent text-gray-500 hover:bg-gray-100'
         ]"
         @click="$emit('select', 'inProgress')"
@@ -32,7 +32,7 @@
         :class="[
           'px-5 py-2 text-sm font-semibold rounded-full transition-all',
           selectedTab === 'completed'
-            ? 'bg-gradient-to-r from-blue-400 to-blue-600 text-white shadow-sm'
+            ? 'bg-blue-600 text-white shadow-sm'
             : 'bg-transparent text-gray-500 hover:bg-gray-100'
         ]"
         @click="$emit('select', 'completed')"

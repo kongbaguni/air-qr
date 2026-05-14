@@ -1,18 +1,40 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('fs')
+const path = require('path')
 
-const indexPath = path.join(__dirname, '../dist/index.html');
+const distDir = path.join(__dirname, '../dist')
+const indexPath = path.join(distDir, 'index.html')
+const csvName = '001.csv'
+const csvPath = path.join(distDir, csvName)
+const bundlePath = path.join(distDir, 'js/facility-csv-data.js')
+const bundleScriptTag = '<script src="js/facility-csv-data.js"></script>'
 
-if (fs.existsSync(indexPath)) {
-  let content = fs.readFileSync(indexPath, 'utf8');
-
-  // type="module" 제거하고 nomodule도 제거 (legacy만 남김)
-  content = content.replace(/<script[^>]*type="module"[^>]*><\/script>/g, '');
-  content = content.replace(/\s+nomodule/g, '');
-
-  fs.writeFileSync(indexPath, content, 'utf8');
-  console.log('✅ index.html 수정 완료 (ES modules 제거)');
-} else {
-  console.error('❌ dist/index.html 파일을 찾을 수 없습니다.');
-  process.exit(1);
+if (!fs.existsSync(indexPath)) {
+  console.error('dist/index.html 파일을 찾을 수 없습니다.')
+  process.exit(1)
 }
+
+let content = fs.readFileSync(indexPath, 'utf8')
+
+content = content.replace(/<script[^>]*type="module"[^>]*><\/script>/g, '')
+content = content.replace(/\s+nomodule/g, '')
+
+if (fs.existsSync(csvPath)) {
+  const csvText = fs.readFileSync(csvPath, 'utf8')
+  fs.mkdirSync(path.dirname(bundlePath), { recursive: true })
+  fs.writeFileSync(
+    bundlePath,
+    'window.__FACILITY_CSV_BUNDLE__=' + JSON.stringify(csvText) + ';\n',
+    'utf8'
+  )
+
+  if (content.indexOf(bundleScriptTag) === -1) {
+    content = content.replace('</body>', '  ' + bundleScriptTag + '\n</body>')
+  }
+
+  console.log('facility-csv-data.js 생성 완료')
+} else {
+  console.warn('dist/' + csvName + ' 없음. file:// CSV 번들을 건너뜁니다.')
+}
+
+fs.writeFileSync(indexPath, content, 'utf8')
+console.log('index.html 수정 완료')
