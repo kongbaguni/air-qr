@@ -1,6 +1,7 @@
-import { getFacilitySiteMgmtNo } from '@/utils/facilityCsv'
+import { getFacilitySiteMgmtNo, SITE_MGMT_FIELD_KEY } from '@/utils/facilityCsv'
 import {
   deleteQRData,
+  exportCSV,
   extractResponsePayload,
   isNativeBridgeAvailable,
   isNativeSuccess,
@@ -52,7 +53,7 @@ function callNativeWithCallback(interfaceId, requestPayload, onSuccess, onError)
   })
 
   if (interfaceId === 'saveQRData') {
-    saveQRData(requestPayload.author, requestPayload, callbackName)
+    saveQRData(requestPayload, callbackName)
     return
   }
 
@@ -63,6 +64,11 @@ function callNativeWithCallback(interfaceId, requestPayload, onSuccess, onError)
 
   if (interfaceId === 'loadQRData') {
     loadQRData(requestPayload.author, requestPayload, callbackName)
+    return
+  }
+
+  if (interfaceId === 'exportCSV') {
+    exportCSV(callbackName)
     return
   }
 
@@ -110,13 +116,24 @@ function buildNativeQrPayload(mapping) {
   }
 }
 
-function buildNativeSaveQrPayload(mapping, dateTime) {
+function buildNativeSaveQrItem(mapping) {
   return {
-    author: QR_AUTHOR,
-    qrcode: getMappingQrCode(mapping),
-    sn: getMappingSiteMgmtNo(mapping),
-    dateTime: dateTime || formatKstDateTime()
+    key: SITE_MGMT_FIELD_KEY,
+    keyValue: getMappingSiteMgmtNo(mapping),
+    qrcode: getMappingQrCode(mapping)
   }
+}
+
+function buildNativeSaveQrRequestPayload(mappings) {
+  var items = []
+  var i
+
+  for (i = 0; i < (mappings || []).length; i += 1) {
+    items.push(buildNativeSaveQrItem(mappings[i]))
+  }
+
+  if (items.length === 1) return items[0]
+  return items
 }
 
 function pickFacilityName(facility, facilityId) {
@@ -139,7 +156,7 @@ function nativeRecordsToMappings(records, facilities) {
 
   for (i = 0; i < (records || []).length; i += 1) {
     record = records[i] || {}
-    siteMgmtNo = String(record.sn || '').trim()
+    siteMgmtNo = String(record.keyValue || record.sn || '').trim()
     facility = facilityIndex[siteMgmtNo] || null
     parsedQr = parseQrInput(record.qrcode)
 
@@ -193,38 +210,53 @@ function loadMergedMappings(facilities) {
   })
 }
 
-function saveQrMappingToNative(mapping) {
+function saveQrMappingsToNative(mappings) {
   return new Promise(function (resolve, reject) {
+    var list = mappings || []
     var savedAt = formatKstDateTime()
-    var payload = buildNativeSaveQrPayload(mapping, savedAt)
+    var i
+    var mapping
+    var item
 
-    mapping.dateTime = savedAt
-    mapping.updatedAt = savedAt
-
-    if (!payload.sn) {
-      reject(new Error('현장관리번호가 없어 저장할 수 없습니다.'))
+    if (!list.length) {
+      reject(new Error('저장할 QR 매칭이 없습니다.'))
       return
     }
 
-    if (!payload.qrcode) {
-      reject(new Error('QR 원문이 없어 저장할 수 없습니다.'))
-      return
-    }
+    for (i = 0; i < list.length; i += 1) {
+      mapping = list[i]
+      item = buildNativeSaveQrItem(mapping)
 
-    if (mapping.nativeId) {
-      payload.id = mapping.nativeId
+      if (!item.keyValue) {
+        reject(new Error('현장관리번호가 없어 저장할 수 없습니다.'))
+        return
+      }
+
+      if (!item.qrcode) {
+        reject(new Error('QR 원문이 없어 저장할 수 없습니다.'))
+        return
+      }
+
+      mapping.dateTime = savedAt
+      mapping.updatedAt = savedAt
     }
 
     callNativeWithCallback(
       'saveQRData',
-      payload,
+      buildNativeSaveQrRequestPayload(list),
       function() {
-        resolve(mapping)
+        resolve(list)
       },
       function(error) {
         reject(error || new Error('saveQRData failed'))
       }
     )
+  })
+}
+
+function saveQrMappingToNative(mapping) {
+  return saveQrMappingsToNative([mapping]).then(function(list) {
+    return list[0]
   })
 }
 
@@ -263,11 +295,28 @@ function createMappingForFacility(facility, parsedQr) {
   return createMapping(facility, parsedQr)
 }
 
+function requestExportCsv() {
+  return new Promise(function (resolve, reject) {
+    callNativeWithCallback(
+      'exportCSV',
+      {},
+      function () {
+        resolve(true)
+      },
+      function (error) {
+        reject(error || new Error('exportCSV failed'))
+      }
+    )
+  })
+}
+
 export {
   QR_AUTHOR,
   loadQrMappingsFromNative,
   loadMergedMappings,
+  saveQrMappingsToNative,
   saveQrMappingToNative,
   deleteQrMappingFromNative,
+  requestExportCsv,
   createMappingForFacility
 }

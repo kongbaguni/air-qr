@@ -382,7 +382,7 @@ import {
 } from '@/utils/native'
 import {
   loadMergedMappings,
-  saveQrMappingToNative
+  saveQrMappingsToNative
 } from '@/utils/qrNativeStorage'
 import {
   createMapping,
@@ -1329,7 +1329,7 @@ export default {
       var nextMappings = []
       var facility
       var mapping
-      var saveTasks = []
+      var mappingsToSave = []
 
       for (i = 0; i < this.selectedFacilityIds.length; i += 1) {
         selectedIdSet[this.selectedFacilityIds[i]] = true
@@ -1344,17 +1344,18 @@ export default {
       for (i = 0; i < this.selectedFacilities.length; i += 1) {
         facility = this.selectedFacilities[i]
         mapping = createMapping(facility, this.parsedQr)
-        if (this.getFacilityMapping(facility.id) && this.getFacilityMapping(facility.id).nativeId) {
-          mapping.nativeId = this.getFacilityMapping(facility.id).nativeId
-        }
         nextMappings.unshift(mapping)
-        saveTasks.push(saveQrMappingToNative(mapping))
+        mappingsToSave.push(mapping)
       }
 
-      Promise.all(saveTasks)
+      saveQrMappingsToNative(mappingsToSave)
         .then(function() {
           self.mappings = nextMappings
           vibrate(120)
+          self.showNoticeModal(
+            '저장 완료',
+            mappingsToSave.length + '건의 QR 매칭을 저장했습니다.'
+          )
         })
         .catch(function() {
           self.showNoticeModal('저장 실패', 'QR 매칭 저장에 실패했습니다.')
@@ -1770,10 +1771,6 @@ export default {
 .ghost-button {
   background: #f4f4f5;
   color: #3f3f46;
-}
-
-.export-button {
-  align-self: flex-end;
 }
 
 .accent-button,

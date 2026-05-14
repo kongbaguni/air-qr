@@ -115,4 +115,12 @@ function facilityRecordsFromCsvText(text) {
   return records
 }
 
-export { parseCsv, normalizeValue, facilityRecordsFromCsvText, getFacilitySiteMgmtNo }
+var SITE_MGMT_FIELD_KEY = '현장관리번호'
+
+export {
+  parseCsv,
+  normalizeValue,
+  facilityRecordsFromCsvText,
+  getFacilitySiteMgmtNo,
+  SITE_MGMT_FIELD_KEY
+}

@@ -90,12 +90,8 @@ function qrScan(callback, title) {
   callNative('qrScan', callback, title != null ? { title: title } : {})
 }
 
-function saveQRData(author, payload, callback) {
-  callNative(
-    'saveQRData',
-    callback || '',
-    Object.assign({ author: author || '' }, payload || {})
-  )
+function saveQRData(payload, callback) {
+  callNative('saveQRData', callback || '', payload || {})
 }
 
 function deleteQRData(author, payload, callback) {
@@ -112,6 +108,10 @@ function loadQRData(author, payload, callback) {
     callback || '',
     Object.assign({ author: author || '' }, payload || {})
   )
+}
+
+function exportCSV(callback) {
+  callNative('exportCSV', callback || '', {})
 }
 
 function vibrate(time) {
@@ -133,6 +133,7 @@ export {
   saveQRData,
   deleteQRData,
   loadQRData,
+  exportCSV,
   vibrate,
   fixWebViewTextZoom
 }

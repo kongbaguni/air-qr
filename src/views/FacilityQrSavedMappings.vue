@@ -8,6 +8,9 @@
         </div>
         <div class="header-actions">
           <router-link class="ghost-button" to="/">매칭 화면</router-link>
+          <button class="ghost-button" type="button" :disabled="exportingCsv" @click="exportMatchingCsv">
+            {{ exportingCsv ? 'CSV 생성 중…' : 'CSV 생성' }}
+          </button>
           <button class="accent-button" type="button" :disabled="reloading" @click="reloadSavedMappings">
             다시 불러오기
           </button>
@@ -69,7 +72,8 @@ import { vibrate } from '@/utils/native'
 import { getQrStoredValue } from '@/utils/qrMatcher'
 import {
   deleteQrMappingFromNative,
-  loadQrMappingsFromNative
+  loadQrMappingsFromNative,
+  requestExportCsv
 } from '@/utils/qrNativeStorage'
 export default {
   name: 'FacilityQrSavedMappings',
@@ -84,6 +88,7 @@ export default {
       reloadMessage: '',
       reloadError: '',
       reloading: false,
+      exportingCsv: false,
       deleteModalVisible: false,
       pendingDeleteMapping: null
     }
@@ -163,6 +168,25 @@ export default {
         })
         .catch(function () {
           self.reloadError = 'QR 매칭 삭제에 실패했습니다.'
+        })
+    },
+    exportMatchingCsv: function () {
+      var self = this
+
+      if (this.exportingCsv) return
+
+      this.exportingCsv = true
+      this.reloadError = ''
+      requestExportCsv()
+        .then(function () {
+          self.reloadMessage = 'CSV 생성을 요청했습니다.'
+          vibrate(80)
+        })
+        .catch(function () {
+          self.reloadError = 'CSV 생성에 실패했습니다.'
+        })
+        .finally(function () {
+          self.exportingCsv = false
         })
     }
   }
