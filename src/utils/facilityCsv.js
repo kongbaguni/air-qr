@@ -1,10 +1,27 @@
 /**
- * 시설자산 CSV (퍼블릭 또는 브릿지로 받은 텍스트) 파싱.
- * CSV 파싱 규칙: 따옴표·쉼표 포함 필드는 RFC 4180 스타일로 처리합니다.
+ * 시설자산 CSV 파싱 — 컬럼명은 config/facilityCsv.config.js 별칭으로 흡수
  */
+
+import { FACILITY_CSV_FIELD_ALIASES as ALIASES } from '@/config/facilityCsv.config'
 
 function normalizeValue(value) {
   return String(value || '').trim()
+}
+
+function normalizeHeader(value) {
+  var v = normalizeValue(value)
+  if (v && v.charCodeAt(0) === 0xfeff) {
+    v = v.slice(1)
+  }
+  return v
+}
+
+function stripLeadingBom(text) {
+  var s = String(text || '')
+  if (s.charCodeAt(0) === 0xfeff) {
+    return s.slice(1)
+  }
+  return s
 }
 
 function parseCsv(text) {
@@ -57,11 +74,21 @@ function parseCsv(text) {
 }
 
 function pickFirst(record, keys) {
-  for (var k = 0; k < keys.length; k += 1) {
-    var v = record[keys[k]]
+  var list = keys || []
+  for (var k = 0; k < list.length; k += 1) {
+    var v = record[list[k]]
     if (v != null && String(v).trim() !== '') return String(v).trim()
   }
   return ''
+}
+
+function copyAlias(record, targetKey, aliasKeys) {
+  var v = pickFirst(record, aliasKeys)
+  if (v) record[targetKey] = v
+}
+
+function isSkippableDataRow(record) {
+  return !pickFirst(record, ALIASES.siteMgmtNo) && !pickFirst(record, ALIASES.specName)
 }
 
 function getFacilitySiteMgmtNo(facility) {
@@ -69,23 +96,46 @@ function getFacilitySiteMgmtNo(facility) {
   if (facility.siteMgmtNo != null && String(facility.siteMgmtNo).trim() !== '') {
     return String(facility.siteMgmtNo).trim()
   }
-  if (facility['현장관리번호'] != null && String(facility['현장관리번호']).trim() !== '') {
-    return String(facility['현장관리번호']).trim()
-  }
-  return ''
+  return pickFirst(facility, ALIASES.siteMgmtNo)
 }
 
-/**
- * 헤더 행이 있는 CSV 텍스트를 시설 레코드 배열로 변환합니다.
- * id: 현장관리번호 우선, 없으면 시설번호, 없으면 행 인덱스.
- */
+function normalizeFacilityRecord(record) {
+  var siteMgmtNo = pickFirst(record, ALIASES.siteMgmtNo)
+  if (siteMgmtNo) {
+    record.siteMgmtNo = siteMgmtNo
+    record['현장관리번호'] = siteMgmtNo
+  }
+
+  var specName = pickFirst(record, ALIASES.specName)
+  if (specName) {
+    record['시설명칭'] = specName
+    record.facilityName = specName
+  }
+
+  var facilityNo = pickFirst(record, ALIASES.facilityNo)
+  if (facilityNo) record['시설번호'] = facilityNo
+
+  copyAlias(record, 'eqNo', ALIASES.eqNo)
+  copyAlias(record, 'F1(대)', ALIASES.f1)
+  copyAlias(record, 'F2(중)', ALIASES.f2)
+  copyAlias(record, 'F3(소)', ALIASES.f3)
+  copyAlias(record, 'F4(세)', ALIASES.f4)
+  copyAlias(record, 'L2(단지)', ALIASES.l2)
+  copyAlias(record, 'L3(건물)', ALIASES.l3)
+  copyAlias(record, 'L4(층)', ALIASES.l4)
+  copyAlias(record, 'L5(섹터)', ALIASES.l5)
+  copyAlias(record, 'L6(룸)', ALIASES.l6)
+
+  return record
+}
+
 function facilityRecordsFromCsvText(text) {
-  var rows = parseCsv(text)
+  var rows = parseCsv(stripLeadingBom(text))
   if (rows.length < 2) {
     throw new Error('CSV에 헤더와 데이터 행이 필요합니다.')
   }
 
-  var headers = rows[0].map(normalizeValue)
+  var headers = rows[0].map(normalizeHeader)
   var records = []
   var r
   var values
@@ -100,14 +150,21 @@ function facilityRecordsFromCsvText(text) {
       record[headers[h]] = normalizeValue(values[h])
     }
 
-    record.siteMgmtNo = pickFirst(record, ['현장관리번호'])
+    if (isSkippableDataRow(record)) continue
+
+    normalizeFacilityRecord(record)
+    var specNameForId = pickFirst(record, ALIASES.specName)
     id =
       record.siteMgmtNo ||
       pickFirst(record, ['id']) ||
-      pickFirst(record, ['시설번호']) ||
+      pickFirst(record, ALIASES.facilityNo) ||
+      pickFirst(record, ALIASES.eqNo) ||
+      specNameForId ||
       'ROW-' + r
     record.id = id
-    if (!record.qrCode) record.qrCode = pickFirst(record, ['qrCode', 'QR코드', '시드QR'])
+    if (!record.qrCode) {
+      record.qrCode = pickFirst(record, ALIASES.qrCode)
+    }
 
     records.push(record)
   }

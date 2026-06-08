@@ -3,8 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "//": "── 시설 QR CSV (public/NNN.csv 추가만, package.json 수정 불필요) ──",
     "dev": "vue-cli-service serve",
+    "dev:csv": "node scripts/facility-csv.js dev",
+    "//dev:csv": "pnpm dev:csv [004]  → public/004.csv 로 개발 (미지정 시 003.csv)",
     "build": "vue-cli-service build --no-module && node scripts/fix-index.js",
+    "build:csv": "node scripts/facility-csv.js build",
+    "//build:csv": "pnpm build:csv [004]  → CSV 번들 포함 빌드 (fix-index.js)",
+    "facility-csv": "node scripts/facility-csv.js",
+    "//facility-csv": "pnpm facility-csv list  → 사용 가능 CSV 목록",
     "build:modern": "vue-cli-service build",
     "lint": "vue-cli-service lint",
     "lint:fix": "vue-cli-service lint --fix",
@@ -13,8 +20,10 @@
   "dependencies": {
     "core-js": "^3.8.3",
     "date-fns": "2.30.0",
+    "lodash.debounce": "^4.0.8",
     "vue": "^2.6.14",
     "vue-i18n": "8.28.2",
+    "vue-infinite-loading": "^2.4.5",
     "vue-router": "^3.6.5",
     "vuex": "^3.6.2"
   },

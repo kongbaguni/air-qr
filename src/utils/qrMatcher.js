@@ -1,4 +1,11 @@
 import { getFacilitySiteMgmtNo } from '@/utils/facilityCsv'
+import {
+  getCatalogMatchMode,
+  getFacilityDisplayCategory,
+  getFacilityDisplayLocation,
+  getFacilitySpecName,
+  getFacilityStorageKey
+} from '@/utils/facilityIndex'
 
 function normalizeText(value) {
   return String(value || '')
@@ -50,21 +57,26 @@ function parseQrInput(rawValue) {
   }
 }
 
-function createMapping(facility, parsedQr) {
+function createMapping(facility, parsedQr, catalog) {
+  var matchMode = getCatalogMatchMode(catalog)
   var siteMgmtNo = getFacilitySiteMgmtNo(facility)
+  var storageKey = getFacilityStorageKey(facility, catalog)
 
   return {
-    facilityId: siteMgmtNo || facility.id,
+    facilityId: facility.id,
     siteMgmtNo: siteMgmtNo,
-    facilityName: facility.facilityName || facility['시설명칭'] || '',
-    category: facility.category,
-    location: facility.location,
+    matchKey: storageKey,
+    matchMode: matchMode,
+    facilityName: getFacilitySpecName(facility) || '',
+    facilityNumber: facility['시설번호'] || '',
+    category: getFacilityDisplayCategory(facility) || facility.category || '',
+    location: getFacilityDisplayLocation(facility) || facility.location || '',
     qr: parsedQr,
     updatedAt: new Date().toISOString()
   }
 }
 
-function createSeedMappings(facilities) {
+function createSeedMappings(facilities, catalog) {
   var list = []
 
   for (var i = 0; i < (facilities || []).length; i += 1) {
@@ -72,12 +84,72 @@ function createSeedMappings(facilities) {
     var parsedQr = parseQrInput(facility.qrCode)
 
     if (!parsedQr.isValid) continue
-    list.push(
-      createMapping(facility, parsedQr)
-    )
+    list.push(createMapping(facility, parsedQr, catalog))
   }
 
   return list
+}
+
+function getMappingUpdatedTimestamp(mapping) {
+  if (!mapping) return 0
+  var raw = mapping.updatedAt || mapping.dateTime || ''
+  if (!raw) return 0
+  var time = new Date(raw).getTime()
+  return isNaN(time) ? 0 : time
+}
+
+function sortMappingsByRecent(mappings) {
+  return (mappings || []).slice().sort(function(a, b) {
+    return getMappingUpdatedTimestamp(b) - getMappingUpdatedTimestamp(a)
+  })
+}
+
+var UNKNOWN_MAPPING_DATE_KEY = '__unknown__'
+
+function getMappingDateKey(mapping) {
+  var ts = getMappingUpdatedTimestamp(mapping)
+  if (!ts) return UNKNOWN_MAPPING_DATE_KEY
+  return new Date(ts).toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+}
+
+function formatMappingDateLabel(dateKey) {
+  if (!dateKey || dateKey === UNKNOWN_MAPPING_DATE_KEY) return '날짜 없음'
+  var parts = String(dateKey).split('-')
+  if (parts.length !== 3) return String(dateKey)
+  return parts[0] + '년 ' + Number(parts[1]) + '월 ' + Number(parts[2]) + '일'
+}
+
+function getMappingDateOptions(mappings) {
+  var counts = {}
+  var keys = []
+  var i
+  var key
+
+  for (i = 0; i < (mappings || []).length; i += 1) {
+    key = getMappingDateKey(mappings[i])
+    counts[key] = (counts[key] || 0) + 1
+  }
+
+  keys = Object.keys(counts).sort(function(a, b) {
+    if (a === UNKNOWN_MAPPING_DATE_KEY) return 1
+    if (b === UNKNOWN_MAPPING_DATE_KEY) return -1
+    return b.localeCompare(a)
+  })
+
+  return keys.map(function(dateKey) {
+    return {
+      key: dateKey,
+      label: formatMappingDateLabel(dateKey),
+      count: counts[dateKey]
+    }
+  })
+}
+
+function filterMappingsByDate(mappings, dateKey) {
+  if (!dateKey) return mappings || []
+  return (mappings || []).filter(function(mapping) {
+    return getMappingDateKey(mapping) === dateKey
+  })
 }
 
 function mergeMappings(seedMappings, storedMappings) {
@@ -98,11 +170,7 @@ function mergeMappings(seedMappings, storedMappings) {
     merged.push(byFacility[facilityIds[i]])
   }
 
-  merged.sort(function(a, b) {
-    return String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))
-  })
-
-  return merged
+  return sortMappingsByRecent(merged)
 }
 
 export {
@@ -112,5 +180,12 @@ export {
   parseQrInput,
   createMapping,
   createSeedMappings,
-  mergeMappings
+  getMappingUpdatedTimestamp,
+  getMappingDateKey,
+  formatMappingDateLabel,
+  getMappingDateOptions,
+  filterMappingsByDate,
+  sortMappingsByRecent,
+  mergeMappings,
+  UNKNOWN_MAPPING_DATE_KEY
 }

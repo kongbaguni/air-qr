@@ -1,4 +1,6 @@
-var DEV_FACILITY_CSV_NAME = '001.csv'
+import { DEFAULT_FACILITY_CSV } from '@/config/facilityCsv.config'
+
+var DEV_FACILITY_CSV_NAME = DEFAULT_FACILITY_CSV
 
 function uniqueUrls(urls) {
   var seen = {}

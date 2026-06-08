@@ -68,3 +68,54 @@ export function deepClone(obj) {
 export function generateId() {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
+
+/**
+ * Focused input이 모바일 키패드에 가리지 않도록 스크롤합니다.
+ * visualViewport가 있으면 키보드 높이를 반영해 추가 보정합니다.
+ */
+export function scrollFocusedFieldIntoView(element, options) {
+  if (!element || typeof element.getBoundingClientRect !== 'function') return
+
+  var opts = options || {}
+  var scrollContainer = null
+  var keyboardPadding = opts.keyboardPadding != null ? opts.keyboardPadding : 96
+  var delays = opts.delays || [0, 280, 520]
+  var i
+
+  if (opts.scrollContainer) {
+    if (typeof opts.scrollContainer === 'string') {
+      scrollContainer = document.querySelector(opts.scrollContainer)
+    } else {
+      scrollContainer = opts.scrollContainer
+    }
+  }
+
+  var alignField = function() {
+    if (typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({
+        block: 'center',
+        inline: 'nearest',
+        behavior: opts.behavior || 'smooth'
+      })
+    }
+
+    if (!window.visualViewport) return
+
+    var rect = element.getBoundingClientRect()
+    var visibleBottom = window.visualViewport.offsetTop + window.visualViewport.height
+    var overflow = rect.bottom - (visibleBottom - keyboardPadding)
+
+    if (overflow <= 0) return
+
+    if (scrollContainer) {
+      scrollContainer.scrollTop += overflow
+      return
+    }
+
+    window.scrollBy(0, overflow)
+  }
+
+  for (i = 0; i < delays.length; i += 1) {
+    setTimeout(alignField, delays[i])
+  }
+}

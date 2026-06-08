@@ -1,5 +1,5 @@
 <template>
-  <div class="matcher-page">
+  <div class="matcher-page" infinite-wrapper>
     <section class="workspace-stack">
       <article class="panel-card compact">
         <div class="panel-header">
@@ -75,13 +75,18 @@
           <button class="ghost-button" type="button" @click="resetFacilityFilters">필터 초기화</button>
         </div>
 
-        <label class="field-label">
-          시설명칭 · 시설번호 검색
+        <label class="field-label field-label--search">
+          {{ facilitySearchLabel }}
           <input
-            v-model.trim="query"
+            ref="facilitySearchInput"
+            v-model.trim="queryInput"
             class="text-input"
-            type="text"
-            placeholder="시설명칭 또는 시설번호로 검색"
+            type="search"
+            enterkeyhint="search"
+            autocomplete="off"
+            :placeholder="facilitySearchPlaceholder"
+            @focus="onFacilitySearchFocus"
+            @input="onSearchInput"
           />
         </label>
 
@@ -265,7 +270,7 @@
           <div class="selected-card-head">
             <div>
               <p class="selected-label">선택된 시설 {{ selectedFacilityCount }}건</p>
-              <p class="selected-meta">목록에서 고른 현장관리번호에 동일 QR을 등록합니다.</p>
+              <p class="selected-meta">{{ selectedFacilityMetaLabel }}</p>
             </div>
             <button class="ghost-button" type="button" @click="clearFacilitySelection">전체 해제</button>
           </div>
@@ -295,8 +300,8 @@
         <div class="list-header">
           <span>검색 결과 {{ filteredFacilities.length }}건</span>
           <span v-if="selectedFacilityCount">선택 {{ selectedFacilityCount }}건</span>
-          <span v-if="filteredFacilities.length > currentVisibleFacilityCount">
-            상위 {{ currentVisibleFacilityCount }}건 표시
+          <span v-if="hasMoreFacilitiesToLoad">
+            {{ visibleFacilities.length }}건 표시 · 스크롤 시 더 불러옴
           </span>
         </div>
 
@@ -330,13 +335,24 @@
           <div v-if="!filteredFacilities.length" class="empty-list">
             검색 조건에 맞는 시설이 없습니다. CSV 데이터나 필터 조합을 확인하세요.
           </div>
+
+          <infinite-loading
+            v-if="showFacilityInfiniteLoading"
+            force-use-infinite-wrapper
+            :identifier="infiniteId"
+            @infinite="onInfiniteFacilityList"
+          >
+            <span slot="no-more" class="infinite-slot-hidden" />
+            <span slot="no-results" class="infinite-slot-hidden" />
+            <span slot="error" class="infinite-slot-hidden" />
+          </infinite-loading>
         </div>
       </article>
 
 <section class="bottom-stats">
         <div class="stat-box">
           <span class="stat-label">시설 수</span>
-          <strong class="stat-value">{{ facilities.length }}</strong>
+          <strong class="stat-value">{{ facilityCount }}</strong>
         </div>
         <router-link class="stat-box stat-box-link" to="/saved-mappings">
           <span class="stat-label">저장 매칭</span>
@@ -367,13 +383,47 @@
 </template>
 
 <script>
+import debounce from 'lodash.debounce'
+import InfiniteLoading from 'vue-infinite-loading'
+import { scrollFocusedFieldIntoView } from '@/utils/helpers'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import ScrollTopButton from '@/components/common/ScrollTopButton.vue'
-import { facilityRecordsFromCsvText } from '@/utils/facilityCsv'
+import {
+  buildMappingIndex,
+  buildPoolAfterF,
+  filterFacilities,
+  getF2Options,
+  getF3Options,
+  getF4Options,
+  getL2Options,
+  getL3Options,
+  getL4Options,
+  getL5Options,
+  getL6Options,
+  getL7Options,
+  getFacilityF1,
+  getFacilityF2,
+  getFacilityF3,
+  getFacilityF4,
+  getFacilityL2,
+  getFacilityL3,
+  getFacilityL4,
+  getFacilityL5,
+  getFacilityL6,
+  getFacilityL7,
+  getFacilitySpecName,
+  getFacilitySpecNumber,
+  hasExplicitFacilityFilter,
+  invalidateFilterCache,
+  isClassifiedFilterValue,
+  resolveFacilitiesByIds,
+  hydrateMappingsWithCatalog
+} from '@/utils/facilityIndex'
 import {
   DEV_FACILITY_CSV_NAME,
-  loadPublicFacilityCsv
-} from '@/utils/facilityCsvSource'
+  loadFacilityCatalog,
+  setFacilityCatalogFromCsvText
+} from '@/utils/facilityStore'
 import {
   extractResponsePayload,
   isNativeBridgeAvailable,
@@ -394,138 +444,26 @@ import {
 
 var SCAN_CALLBACK_NAME = '__facilityQrScanCallback__'
 var DEV_QR_SCAN_FALLBACK = 'IFAC001'
-
-function uniqueSorted(values) {
-  var set = {}
-
-  for (var i = 0; i < values.length; i += 1) {
-    if (values[i]) set[values[i]] = true
-  }
-
-  return Object.keys(set).sort()
-}
-
-function pickField(record, keys) {
-  for (var i = 0; i < keys.length; i += 1) {
-    var key = keys[i]
-    var v = record[key]
-    if (v != null && String(v).trim() !== '') return String(v).trim()
-  }
-  return ''
-}
-
-function getFacilityF1(f) {
-  return pickField(f, ['F1(대)', 'f1', 'category1'])
-}
-
-function getFacilityF2(f) {
-  return pickField(f, ['F2(중)', 'f2', 'category2'])
-}
-
-function getFacilityF3(f) {
-  return pickField(f, ['F3(소)', 'f3', 'category3'])
-}
-
-function getFacilityF4(f) {
-  return pickField(f, ['F4(세)', 'f4'])
-}
-
-function getFacilityL2(f) {
-  return pickField(f, ['L2(단지)', 'l2'])
-}
-
-function getFacilityL3(f) {
-  var fromCol = pickField(f, ['L3(건물)', 'l3'])
-  if (fromCol) return fromCol
-  if (!getFacilityL2(f)) return pickField(f, ['location'])
-  return ''
-}
-
-function getFacilityL4(f) {
-  return pickField(f, ['L4(층)', 'l4'])
-}
-
-function getFacilityL5(f) {
-  return pickField(f, ['L5(섹터)', 'l5'])
-}
-
-function getFacilityL6(f) {
-  return pickField(f, ['L6(룸)', 'l6'])
-}
-
-function getFacilityL7(f) {
-  return pickField(f, ['L7(상세)', 'l7'])
-}
-
-function getFacilitySpecName(f) {
-  return pickField(f, ['시설명칭', 'facilityName'])
-}
-
-function getFacilitySpecNumber(f) {
-  return pickField(f, ['시설번호', 'facilityNumber'])
-}
-
-function simplifyNumericToken(value) {
-  var s = String(value || '').trim().toLowerCase()
-  if (/^\d+\.0$/.test(s)) return s.replace(/\.0$/, '')
-  return s
-}
-
-function normalizeSearchCompact(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[\s\-_./·,;:()[\]{}'"`]+/g, '')
-}
-
-function matchesFacilitySearchQuery(facility, normalizedQuery, compactQuery) {
-  var values = [
-    getFacilitySpecName(facility),
-    getFacilitySpecNumber(facility),
-    simplifyNumericToken(getFacilitySpecNumber(facility))
-  ]
-
-  for (var i = 0; i < values.length; i += 1) {
-    var raw = values[i]
-    if (!raw) continue
-    if (normalizedQuery && normalizeText(raw).indexOf(normalizedQuery) !== -1) return true
-    if (compactQuery && normalizeSearchCompact(raw).indexOf(compactQuery) !== -1) return true
-  }
-
-  return false
-}
-
-function isUnclassifiedFilterValue(value) {
-  if (value == null) return true
-  var text = String(value).trim()
-  if (!text) return true
-  return text === '미분류'
-}
-
-function isClassifiedFilterValue(value) {
-  return !isUnclassifiedFilterValue(value)
-}
-
-function uniqueSortedFilterOptions(values) {
-  var filtered = []
-
-  for (var i = 0; i < values.length; i += 1) {
-    if (isClassifiedFilterValue(values[i])) filtered.push(values[i])
-  }
-
-  return uniqueSorted(filtered)
-}
+var FACILITY_LIST_PAGE_SIZE = 40
+var FACILITY_LIST_INITIAL_BROWSE = 5
+var SEARCH_DEBOUNCE_MS = 300
 
 export default {
   name: 'FacilityQrMatcher',
   components: {
     ConfirmModal,
-    ScrollTopButton
+    ScrollTopButton,
+    InfiniteLoading
   },
   data() {
     return {
-      facilities: [],
+      catalog: null,
+      mappingByFacilityId: Object.create(null),
       mappings: [],
+      queryInput: '',
       query: '',
+      listLimit: FACILITY_LIST_INITIAL_BROWSE,
+      infiniteId: 0,
       resetTapCount: 0,
       resetTapTimer: null,
       selectedF1: '',
@@ -541,7 +479,6 @@ export default {
       selectedFacilityIds: [],
       showMatchedFacilities: false,
       qrInput: '',
-      visibleFacilityCount: 60,
       facilitiesLoading: false,
       facilitiesLoadError: '',
       facilitiesDevNotice: '',
@@ -557,57 +494,54 @@ export default {
     }
   },
   computed: {
+    facilities() {
+      return this.catalog ? this.catalog.list : []
+    },
+    facilityCount() {
+      return this.catalog ? this.catalog.count : 0
+    },
+    filterState() {
+      return {
+        query: this.query,
+        selectedF1: this.selectedF1,
+        selectedF2: this.selectedF2,
+        selectedF3: this.selectedF3,
+        selectedF4: this.selectedF4,
+        selectedL2: this.selectedL2,
+        selectedL3: this.selectedL3,
+        selectedL4: this.selectedL4,
+        selectedL5: this.selectedL5,
+        selectedL6: this.selectedL6,
+        selectedL7: this.selectedL7,
+        showMatchedFacilities: this.showMatchedFacilities
+      }
+    },
+    fFilterState() {
+      return {
+        selectedF1: this.selectedF1,
+        selectedF2: this.selectedF2,
+        selectedF3: this.selectedF3,
+        selectedF4: this.selectedF4
+      }
+    },
+    poolAfterF() {
+      if (!this.catalog) return []
+      return buildPoolAfterF(this.catalog, this.fFilterState)
+    },
     f1Options() {
-      return uniqueSortedFilterOptions(
-        this.facilities.map(function(facility) {
-          return getFacilityF1(facility)
-        })
-      )
+      return this.catalog ? this.catalog.f1Options : []
     },
     f2Options() {
-      if (!this.selectedF1) return []
-
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFLevelBefore(facility, 2)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityF2(facility)
-          })
-      )
+      if (!this.catalog || !this.selectedF1) return []
+      return getF2Options(this.catalog, this.selectedF1)
     },
     f3Options() {
-      if (!this.selectedF2) return []
-
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFLevelBefore(facility, 3)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityF3(facility)
-          })
-      )
+      if (!this.catalog || !this.selectedF2) return []
+      return getF3Options(this.catalog, this.selectedF1, this.selectedF2)
     },
     f4Options() {
-      if (!this.selectedF3) return []
-
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFLevelBefore(facility, 4)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityF4(facility)
-          })
-      )
+      if (!this.catalog || !this.selectedF3) return []
+      return getF4Options(this.catalog, this.selectedF1, this.selectedF2, this.selectedF3)
     },
     showF1Filter() {
       return this.f1Options.length > 0
@@ -630,92 +564,22 @@ export default {
       )
     },
     l2Options() {
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFullF(facility)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityL2(facility)
-          })
-      )
+      return getL2Options(this.poolAfterF)
     },
     l3Options() {
-      if (!this.selectedL2) return []
-
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFullF(facility) && this.matchesLChainBeforeLevel(facility, 3)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityL3(facility)
-          })
-      )
+      return getL3Options(this.poolAfterF, this.selectedL2)
     },
     l4Options() {
-      if (!this.selectedL3) return []
-
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFullF(facility) && this.matchesLChainBeforeLevel(facility, 4)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityL4(facility)
-          })
-      )
+      return getL4Options(this.poolAfterF, this.filterState)
     },
     l5Options() {
-      if (!this.selectedL4) return []
-
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFullF(facility) && this.matchesLChainBeforeLevel(facility, 5)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityL5(facility)
-          })
-      )
+      return getL5Options(this.poolAfterF, this.filterState)
     },
     l6Options() {
-      if (!this.selectedL5) return []
-
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFullF(facility) && this.matchesLChainBeforeLevel(facility, 6)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityL6(facility)
-          })
-      )
+      return getL6Options(this.poolAfterF, this.filterState)
     },
     l7Options() {
-      if (!this.selectedL6) return []
-
-      return uniqueSortedFilterOptions(
-        this.facilities
-          .filter(
-            function(facility) {
-              return this.matchesFullF(facility) && this.matchesLChainBeforeLevel(facility, 7)
-            }.bind(this)
-          )
-          .map(function(facility) {
-            return getFacilityL7(facility)
-          })
-      )
+      return getL7Options(this.poolAfterF, this.filterState)
     },
     showL2Filter() {
       return this.l2Options.length > 0
@@ -746,63 +610,63 @@ export default {
       )
     },
     filteredFacilities() {
-      var results = this.facilities.filter(
-        function(facility) {
-          if (!this.matchesAxisFilter(facility)) return false
-
-          var normalizedQuery = normalizeText(this.query)
-          if (!normalizedQuery) return true
-          var compactQuery = normalizeSearchCompact(this.query)
-
-          return matchesFacilitySearchQuery(facility, normalizedQuery, compactQuery)
-        }.bind(this)
-      )
-
-      if (!this.showMatchedFacilities) {
-        results = results.filter(
-          function(facility) {
-            return !this.hasMappingForFacility(facility.id)
-          }.bind(this)
-        )
-      }
-
-      return results.sort(
-        function(a, b) {
-          var aMatched = this.hasMappingForFacility(a.id) ? 1 : 0
-          var bMatched = this.hasMappingForFacility(b.id) ? 1 : 0
-
-          if (aMatched !== bMatched) return aMatched - bMatched
-          return String(a.id).localeCompare(String(b.id))
-        }.bind(this)
-      )
+      if (!this.catalog) return []
+      return filterFacilities(this.catalog, this.filterState, this.mappingByFacilityId)
     },
     visibleFacilities() {
-      return this.filteredFacilities.slice(0, this.currentVisibleFacilityCount)
+      return this.filteredFacilities.slice(0, this.listLimit)
     },
-    currentVisibleFacilityCount() {
-      var normalizedQuery = normalizeText(this.query)
-
-      if (normalizedQuery) return this.filteredFacilities.length
-      if (this.hasExplicitFacilityFilter(normalizedQuery)) return this.visibleFacilityCount
-      return 5
+    hasMoreFacilitiesToLoad() {
+      return this.visibleFacilities.length < this.filteredFacilities.length
+    },
+    showFacilityInfiniteLoading() {
+      return (
+        !!this.catalog &&
+        this.filteredFacilities.length > 0 &&
+        this.listLimit < this.filteredFacilities.length
+      )
+    },
+    listFilterKey() {
+      return [
+        this.query,
+        this.selectedF1,
+        this.selectedF2,
+        this.selectedF3,
+        this.selectedF4,
+        this.selectedL2,
+        this.selectedL3,
+        this.selectedL4,
+        this.selectedL5,
+        this.selectedL6,
+        this.selectedL7,
+        this.showMatchedFacilities ? '1' : '0',
+        this.mappings.length
+      ].join('\x1e')
     },
     selectedFacilities() {
-      var selected = []
-      var idSet = {}
-
-      for (var i = 0; i < this.selectedFacilityIds.length; i += 1) {
-        idSet[this.selectedFacilityIds[i]] = true
-      }
-
-      for (var j = 0; j < this.facilities.length; j += 1) {
-        var facility = this.facilities[j]
-        if (idSet[facility.id]) selected.push(facility)
-      }
-
-      return selected
+      if (!this.catalog) return []
+      return resolveFacilitiesByIds(this.catalog, this.selectedFacilityIds)
     },
     selectedFacilityCount() {
       return this.selectedFacilityIds.length
+    },
+    isSpecNameMatchMode() {
+      return !!(this.catalog && this.catalog.matchMode === 'specName')
+    },
+    facilitySearchLabel() {
+      return this.isSpecNameMatchMode
+        ? '시설명칭 검색'
+        : '시설명칭 · 현장관리번호 검색'
+    },
+    facilitySearchPlaceholder() {
+      return this.isSpecNameMatchMode
+        ? '시설명칭으로 검색'
+        : '시설명칭 또는 현장관리번호로 검색'
+    },
+    selectedFacilityMetaLabel() {
+      return this.isSpecNameMatchMode
+        ? '목록에서 고른 시설명칭에 동일 QR을 등록합니다.'
+        : '목록에서 고른 현장관리번호에 동일 QR을 등록합니다.'
     },
     selectedFacilityStatusLabel() {
       if (!this.selectedFacilityCount) return '미선택'
@@ -880,9 +744,27 @@ export default {
     },
     activeFilterCount() {
       return this.activeFilterChips.length
+    },
+    selectedIdLookup() {
+      var lookup = Object.create(null)
+      var i
+
+      for (i = 0; i < this.selectedFacilityIds.length; i += 1) {
+        lookup[this.selectedFacilityIds[i]] = true
+      }
+
+      return lookup
     }
   },
   watch: {
+    listFilterKey: function() {
+      this.resetListPagination()
+    },
+    'filteredFacilities.length': function(length) {
+      if (!length) {
+        this.infiniteId += 1
+      }
+    },
     selectedF1() {
       this.selectedF2 = ''
       this.selectedF3 = ''
@@ -954,13 +836,16 @@ export default {
       if (next.indexOf(this.selectedL7) === -1) this.selectedL7 = ''
     },
     '$route.path': function (path) {
-      if (path === '/' && this.facilities.length) {
+      if (path === '/' && this.facilityCount) {
         this.refreshMappingsFromNative()
       }
     },
     '$route.query': function () {
       this.applyMatcherRoutePrefill()
     }
+  },
+  created: function() {
+    this.debouncedCommitQuery = debounce(this.commitSearchQuery, SEARCH_DEBOUNCE_MS)
   },
   mounted() {
     var self = this
@@ -983,8 +868,68 @@ export default {
       clearTimeout(this.resetTapTimer)
       this.resetTapTimer = null
     }
+    if (this.debouncedCommitQuery && this.debouncedCommitQuery.cancel) {
+      this.debouncedCommitQuery.cancel()
+    }
   },
   methods: {
+    onFacilitySearchFocus: function() {
+      var self = this
+
+      this.$nextTick(function() {
+        var input = self.$refs.facilitySearchInput
+        if (!input) return
+
+        scrollFocusedFieldIntoView(input, {
+          scrollContainer: '.matcher-page',
+          keyboardPadding: 112
+        })
+      })
+    },
+    onSearchInput: function() {
+      if (!String(this.queryInput || '').trim()) {
+        this.commitSearchQuery('')
+      }
+      if (this.debouncedCommitQuery) {
+        this.debouncedCommitQuery(this.queryInput)
+      }
+    },
+    commitSearchQuery: function(value) {
+      var next = String(value || '').trim()
+      if (this.query === next) return
+      this.query = next
+    },
+    getInitialListLimit: function() {
+      var normalizedQuery = normalizeText(this.query)
+
+      if (!hasExplicitFacilityFilter(this.filterState, normalizedQuery)) {
+        return FACILITY_LIST_INITIAL_BROWSE
+      }
+      return FACILITY_LIST_PAGE_SIZE
+    },
+    resetListPagination: function() {
+      this.listLimit = this.getInitialListLimit()
+      this.infiniteId += 1
+    },
+    onInfiniteFacilityList: function($state) {
+      var total = this.filteredFacilities.length
+
+      if (!total || this.listLimit >= total) {
+        $state.complete()
+        return
+      }
+
+      this.listLimit = Math.min(this.listLimit + FACILITY_LIST_PAGE_SIZE, total)
+
+      var self = this
+      this.$nextTick(function() {
+        if (self.listLimit >= total) {
+          $state.complete()
+        } else {
+          $state.loaded()
+        }
+      })
+    },
     toggleFilterPanel() {
       this.filterPanelOpen = !this.filterPanelOpen
     },
@@ -1039,45 +984,12 @@ export default {
       this.selectedL6 = ''
       this.selectedL7 = ''
     },
-    matchesFLevelBefore(facility, forFLevel) {
-      if (forFLevel > 1 && this.selectedF1 && getFacilityF1(facility) !== this.selectedF1) return false
-      if (forFLevel > 2 && this.selectedF2 && getFacilityF2(facility) !== this.selectedF2) return false
-      if (forFLevel > 3 && this.selectedF3 && getFacilityF3(facility) !== this.selectedF3) return false
-      if (forFLevel > 4 && this.selectedF4 && getFacilityF4(facility) !== this.selectedF4) return false
-      return true
-    },
-    matchesFullF(facility) {
-      return this.matchesFLevelBefore(facility, 5)
-    },
-    matchesLChainBeforeLevel(facility, forLevel) {
-      if (forLevel > 2 && this.selectedL2 && getFacilityL2(facility) !== this.selectedL2) return false
-      if (forLevel > 3 && this.selectedL3 && getFacilityL3(facility) !== this.selectedL3) return false
-      if (forLevel > 4 && this.selectedL4 && getFacilityL4(facility) !== this.selectedL4) return false
-      if (forLevel > 5 && this.selectedL5 && getFacilityL5(facility) !== this.selectedL5) return false
-      if (forLevel > 6 && this.selectedL6 && getFacilityL6(facility) !== this.selectedL6) return false
-      if (forLevel > 7 && this.selectedL7 && getFacilityL7(facility) !== this.selectedL7) return false
-      return true
-    },
-    matchesAxisFilter(facility) {
-      return this.matchesFullF(facility) && this.matchesLChainBeforeLevel(facility, 8)
-    },
-    hasExplicitFacilityFilter(normalizedQuery) {
-      return (
-        !!normalizedQuery ||
-        !!this.selectedF1 ||
-        !!this.selectedF2 ||
-        !!this.selectedF3 ||
-        !!this.selectedF4 ||
-        !!this.selectedL2 ||
-        !!this.selectedL3 ||
-        !!this.selectedL4 ||
-        !!this.selectedL5 ||
-        !!this.selectedL6 ||
-        !!this.selectedL7
-      )
-    },
     displayFacilityName(facility) {
-      return getFacilitySpecName(facility) || facility.facilityName || '—'
+      var name = getFacilitySpecName(facility) || facility.facilityName
+      if (name) return name
+      var mapping = this.getFacilityMapping(facility.id)
+      if (mapping && mapping.facilityName) return mapping.facilityName
+      return '—'
     },
     displayFacilityNumber(facility) {
       return getFacilitySpecNumber(facility)
@@ -1112,48 +1024,71 @@ export default {
       this.facilitiesLoadError = ''
       this.facilitiesDevNotice = ''
 
-      loadPublicFacilityCsv(DEV_FACILITY_CSV_NAME)
-        .then(function(text) {
-          if (
-            !self.setFacilitiesFromCsvText(text, 'public/' + DEV_FACILITY_CSV_NAME)
-          ) {
-            self.facilities = []
-            self.mappings = []
-            self.selectedFacilityIds = []
+      loadFacilityCatalog(DEV_FACILITY_CSV_NAME)
+        .then(function(result) {
+          if (!self.setFacilitiesFromCsvText(null, result.sourceLabel, result.catalog)) {
+            self.clearFacilityData()
           }
         })
         .catch(function(err) {
           self.facilitiesLoadError = err && err.message ? err.message : String(err)
           self.facilitiesDevNotice = ''
-          self.facilities = []
-          self.mappings = []
-          self.selectedFacilityIds = []
+          self.clearFacilityData()
         })
         .finally(function() {
           self.facilitiesLoading = false
         })
     },
+    clearFacilityData() {
+      this.catalog = null
+      this.mappingByFacilityId = Object.create(null)
+      this.mappings = []
+      this.selectedFacilityIds = []
+      invalidateFilterCache()
+    },
+    applyMappings(mappings) {
+      var list = mappings || []
+      if (this.catalog) {
+        list = hydrateMappingsWithCatalog(this.catalog, list)
+      }
+      this.mappings = list
+      this.mappingByFacilityId = buildMappingIndex(this.mappings)
+      invalidateFilterCache()
+    },
+    scheduleMappingsLoad() {
+      var self = this
+
+      if (!this.catalog) return
+
+      setTimeout(function() {
+        loadMergedMappings(self.catalog)
+          .then(function(mappings) {
+            self.applyMappings(mappings)
+          })
+          .catch(function() {
+            self.applyMappings([])
+          })
+      }, 0)
+    },
     /**
      * 네이티브 브릿지에서 CSV 전체 텍스트를 넘길 때 사용 (UTF-8).
      * 예: window.__applyFacilityCsv && window.__applyFacilityCsv(text)
      */
-    setFacilitiesFromCsvText(csvText, sourceLabel) {
-      var self = this
+    setFacilitiesFromCsvText(csvText, sourceLabel, existingCatalog) {
+      var catalog = existingCatalog
 
       try {
-        var list = facilityRecordsFromCsvText(csvText)
-        this.facilities = list
+        if (!catalog) {
+          catalog = setFacilityCatalogFromCsvText(csvText, sourceLabel)
+        }
+
+        this.catalog = catalog
         this.selectedFacilityIds = []
         this.facilitiesLoadError = ''
         this.facilitiesDevNotice =
-          (sourceLabel || '시설 CSV') + ' · ' + list.length + '건 반영됨'
-        loadMergedMappings(list)
-          .then(function(mappings) {
-            self.mappings = mappings
-          })
-          .catch(function() {
-            self.mappings = []
-          })
+          (sourceLabel || '시설 CSV') + ' · ' + catalog.count + '건 반영됨'
+        this.applyMappings([])
+        this.scheduleMappingsLoad()
         return true
       } catch (e) {
         this.facilitiesLoadError = e && e.message ? e.message : String(e)
@@ -1164,32 +1099,24 @@ export default {
     refreshMappingsFromNative() {
       var self = this
 
-      if (!this.facilities.length) return
+      if (!this.catalog) return
 
-      loadMergedMappings(this.facilities)
+      loadMergedMappings(this.catalog)
         .then(function(mappings) {
-          self.mappings = mappings
+          self.applyMappings(mappings)
         })
         .catch(function() {
-          self.mappings = []
+          self.applyMappings([])
         })
     },
     hasMappingForFacility(facilityId) {
-      for (var i = 0; i < this.mappings.length; i += 1) {
-        if (this.mappings[i].facilityId === facilityId) return true
-      }
-
-      return false
+      return !!this.mappingByFacilityId[facilityId]
     },
     getFacilityMapping(facilityId) {
-      for (var i = 0; i < this.mappings.length; i += 1) {
-        if (this.mappings[i].facilityId === facilityId) return this.mappings[i]
-      }
-
-      return null
+      return this.mappingByFacilityId[facilityId] || null
     },
     isFacilitySelected(facilityId) {
-      return this.selectedFacilityIds.indexOf(facilityId) !== -1
+      return !!this.selectedIdLookup[facilityId]
     },
     toggleFacilitySelection(facility) {
       var id = facility.id
@@ -1217,7 +1144,12 @@ export default {
     },
     resetFacilityFilters() {
       this.trackResetTap()
+      if (this.debouncedCommitQuery && this.debouncedCommitQuery.cancel) {
+        this.debouncedCommitQuery.cancel()
+      }
+      this.queryInput = ''
       this.query = ''
+      this.resetListPagination()
       this.selectedF1 = ''
       this.selectedF2 = ''
       this.selectedF3 = ''
@@ -1343,14 +1275,14 @@ export default {
 
       for (i = 0; i < this.selectedFacilities.length; i += 1) {
         facility = this.selectedFacilities[i]
-        mapping = createMapping(facility, this.parsedQr)
+        mapping = createMapping(facility, this.parsedQr, this.catalog)
         nextMappings.unshift(mapping)
         mappingsToSave.push(mapping)
       }
 
       saveQrMappingsToNative(mappingsToSave)
         .then(function() {
-          self.mappings = nextMappings
+          self.applyMappings(nextMappings)
           vibrate(120)
           self.showNoticeModal(
             '저장 완료',
@@ -1703,6 +1635,11 @@ export default {
   font-weight: 600;
 }
 
+.field-label--search .text-input {
+  scroll-margin-top: 72px;
+  scroll-margin-bottom: min(40vh, 280px);
+}
+
 .toggle-row {
   display: inline-flex;
   align-items: center;
@@ -2022,6 +1959,23 @@ export default {
 
 .mono {
   font-family: Consolas, 'Courier New', monospace;
+}
+
+.infinite-slot-hidden {
+  display: none;
+}
+
+.facility-list >>> .infinite-loading-container {
+  padding: 8px 0 16px;
+}
+
+.facility-list >>> .infinite-status-prompt {
+  pointer-events: none;
+}
+
+.facility-list >>> .loading-spiral {
+  width: 28px;
+  height: 28px;
 }
 
 @media (max-width: 1024px) {

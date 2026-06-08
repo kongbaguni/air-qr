@@ -3,7 +3,8 @@ const path = require('path')
 
 const distDir = path.join(__dirname, '../dist')
 const indexPath = path.join(distDir, 'index.html')
-const csvName = '001.csv'
+/** src/config/facilityCsv.config.js 와 동일 — 빌드 시 VUE_APP_FACILITY_CSV 로 덮어쓸 수 있음 */
+const csvName = process.env.VUE_APP_FACILITY_CSV || '003.csv'
 const csvPath = path.join(distDir, csvName)
 const bundlePath = path.join(distDir, 'js/facility-csv-data.js')
 const bundleScriptTag = '<script src="js/facility-csv-data.js"></script>'

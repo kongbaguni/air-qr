@@ -3,41 +3,45 @@
   @설명: 확인/취소 버튼이 있는 모달 다이얼로그
 -->
 <template>
-  <div v-if="visible" class="fixed inset-0 z-50 flex items-center justify-center">
-    <!-- 배경 오버레이 -->
-    <div class="absolute inset-0 bg-black bg-opacity-50" @click="handleCancel"></div>
+  <transition name="confirm-modal-fade">
+    <div
+      v-if="visible"
+      class="confirm-modal-root"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="title ? 'confirm-modal-title' : null"
+    >
+      <div class="confirm-modal-backdrop" @click="handleCancel"></div>
 
-    <!-- 모달 컨텐츠 -->
-    <div class="relative bg-white rounded-2xl shadow-xl max-w-sm w-full mx-4 overflow-hidden">
-      <!-- 타이틀 -->
-      <div v-if="title" class="px-6 pt-6 pb-4">
-        <h3 class="text-lg font-bold text-gray-900 text-center">{{ title }}</h3>
-      </div>
+      <div class="confirm-modal-panel">
+        <div v-if="title" class="confirm-modal-head">
+          <h3 id="confirm-modal-title" class="confirm-modal-title">{{ title }}</h3>
+        </div>
 
-      <!-- 메시지 -->
-      <div class="px-6 pb-6">
-        <p class="text-sm text-gray-600 text-center whitespace-pre-line">{{ message }}</p>
-      </div>
+        <div class="confirm-modal-body">
+          <p class="confirm-modal-message">{{ message }}</p>
+        </div>
 
-      <!-- 버튼 영역 -->
-      <div class="flex border-t border-gray-200">
-        <button
-          v-if="showCancel"
-          class="flex-1 py-4 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-          @click="handleCancel"
-        >
-          {{ resolvedCancelText }}
-        </button>
-        <div v-if="showCancel" class="w-px bg-gray-200"></div>
-        <button
-          class="flex-1 py-4 text-sm font-medium text-blue-600 hover:bg-gray-50 transition-colors"
-          @click="handleConfirm"
-        >
-          {{ resolvedConfirmText }}
-        </button>
+        <div class="confirm-modal-actions">
+          <button
+            v-if="showCancel"
+            type="button"
+            class="confirm-modal-button confirm-modal-button--cancel"
+            @click="handleCancel"
+          >
+            {{ resolvedCancelText }}
+          </button>
+          <button
+            type="button"
+            class="confirm-modal-button confirm-modal-button--confirm"
+            @click="handleConfirm"
+          >
+            {{ resolvedConfirmText }}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
+  </transition>
 </template>
 
 <script>
@@ -71,10 +75,14 @@ export default {
   },
   computed: {
     resolvedConfirmText: function () {
-      return this.confirmText || this.$t('common.confirm')
+      if (this.confirmText) return this.confirmText
+      if (this.$t) return this.$t('common.confirm')
+      return '확인'
     },
     resolvedCancelText: function () {
-      return this.cancelText || this.$t('common.cancel')
+      if (this.cancelText) return this.cancelText
+      if (this.$t) return this.$t('common.cancel')
+      return '취소'
     }
   },
   methods: {
@@ -91,5 +99,105 @@ export default {
 </script>
 
 <style scoped>
-/* 모달 애니메이션 */
+.confirm-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.confirm-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.confirm-modal-panel {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+  overflow: hidden;
+}
+
+.confirm-modal-head {
+  padding: 20px 20px 0;
+}
+
+.confirm-modal-title {
+  margin: 0;
+  color: #18181b;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.confirm-modal-body {
+  padding: 16px 20px 20px;
+}
+
+.confirm-modal-message {
+  margin: 0;
+  color: #52525b;
+  font-size: 14px;
+  line-height: 1.55;
+  text-align: center;
+  white-space: pre-line;
+  word-break: break-word;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  border-top: 1px solid #e4e4e7;
+}
+
+.confirm-modal-button {
+  flex: 1;
+  border: 0;
+  padding: 14px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  background: #fff;
+  cursor: pointer;
+}
+
+.confirm-modal-button--cancel {
+  color: #52525b;
+}
+
+.confirm-modal-button--confirm {
+  color: #2563eb;
+  border-left: 1px solid #e4e4e7;
+}
+
+.confirm-modal-button:active {
+  background: #f4f4f5;
+}
+
+.confirm-modal-fade-enter-active,
+.confirm-modal-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.confirm-modal-fade-enter-active .confirm-modal-panel,
+.confirm-modal-fade-leave-active .confirm-modal-panel {
+  transition: transform 0.18s ease;
+}
+
+.confirm-modal-fade-enter,
+.confirm-modal-fade-leave-to {
+  opacity: 0;
+}
+
+.confirm-modal-fade-enter .confirm-modal-panel,
+.confirm-modal-fade-leave-to .confirm-modal-panel {
+  transform: translateY(8px) scale(0.98);
+}
 </style>
