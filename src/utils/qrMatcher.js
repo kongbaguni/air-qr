@@ -3,6 +3,7 @@ import {
   getCatalogMatchMode,
   getFacilityDisplayCategory,
   getFacilityDisplayLocation,
+  getFacilitySouId,
   getFacilitySpecName,
   getFacilityStorageKey
 } from '@/utils/facilityIndex'
@@ -59,16 +60,19 @@ function parseQrInput(rawValue) {
 
 function createMapping(facility, parsedQr, catalog) {
   var matchMode = getCatalogMatchMode(catalog)
-  var siteMgmtNo = getFacilitySiteMgmtNo(facility)
+  // [이번 빌드] SOU_ID + qrcode 매칭 (네이티브 key/keyValue = SOU_ID)
   var storageKey = getFacilityStorageKey(facility, catalog)
+  var souId = getFacilitySouId(facility)
+  // 기존: var siteMgmtNo = getFacilitySiteMgmtNo(facility)
+  // 기존: storageKey = 현장관리번호 또는 시설명칭 (catalog.matchMode 자동 감지)
 
   return {
     facilityId: facility.id,
-    siteMgmtNo: siteMgmtNo,
+    siteMgmtNo: getFacilitySiteMgmtNo(facility),
     matchKey: storageKey,
     matchMode: matchMode,
     facilityName: getFacilitySpecName(facility) || '',
-    facilityNumber: facility['시설번호'] || '',
+    facilityNumber: souId || facility['시설번호'] || '',
     category: getFacilityDisplayCategory(facility) || facility.category || '',
     location: getFacilityDisplayLocation(facility) || facility.location || '',
     qr: parsedQr,

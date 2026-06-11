@@ -653,7 +653,11 @@ export default {
     isSpecNameMatchMode() {
       return !!(this.catalog && this.catalog.matchMode === 'specName')
     },
+    isSouIdMatchMode() {
+      return !!(this.catalog && this.catalog.matchMode === 'souId')
+    },
     facilitySearchLabel() {
+      // 검색은 기존과 동일 — 이름·현장관리번호 기준
       return this.isSpecNameMatchMode
         ? '시설명칭 검색'
         : '시설명칭 · 현장관리번호 검색'
@@ -664,6 +668,11 @@ export default {
         : '시설명칭 또는 현장관리번호로 검색'
     },
     selectedFacilityMetaLabel() {
+      // [이번 빌드] QR 매칭 키 = SOU_ID + qrcode
+      if (this.isSouIdMatchMode) {
+        return '목록에서 고른 시설의 SOU_ID에 동일 QR을 등록합니다.'
+      }
+      // 기존: 시설명칭 또는 현장관리번호 기준
       return this.isSpecNameMatchMode
         ? '목록에서 고른 시설명칭에 동일 QR을 등록합니다.'
         : '목록에서 고른 현장관리번호에 동일 QR을 등록합니다.'

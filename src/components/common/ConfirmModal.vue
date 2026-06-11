@@ -6,6 +6,7 @@
   <transition name="confirm-modal-fade">
     <div
       v-if="visible"
+      ref="modalRoot"
       class="confirm-modal-root"
       role="dialog"
       aria-modal="true"
@@ -73,6 +74,32 @@ export default {
       default: true
     }
   },
+  watch: {
+    visible: function (isVisible) {
+      var self = this
+      if (!isVisible) {
+        this.unlockBodyScroll()
+        return
+      }
+      this.$nextTick(function () {
+        self.appendToBody()
+        self.lockBodyScroll()
+      })
+    }
+  },
+  mounted: function () {
+    var self = this
+    if (this.visible) {
+      this.$nextTick(function () {
+        self.appendToBody()
+        self.lockBodyScroll()
+      })
+    }
+  },
+  beforeDestroy: function () {
+    this.unlockBodyScroll()
+    this.removeFromBody()
+  },
   computed: {
     resolvedConfirmText: function () {
       if (this.confirmText) return this.confirmText
@@ -86,6 +113,26 @@ export default {
     }
   },
   methods: {
+    appendToBody: function () {
+      var el = this.$refs.modalRoot
+      if (el && el.parentNode !== document.body) {
+        document.body.appendChild(el)
+      }
+    },
+    removeFromBody: function () {
+      var el = this.$refs.modalRoot
+      if (el && el.parentNode === document.body) {
+        document.body.removeChild(el)
+      }
+    },
+    lockBodyScroll: function () {
+      if (typeof document === 'undefined') return
+      document.body.style.overflow = 'hidden'
+    },
+    unlockBodyScroll: function () {
+      if (typeof document === 'undefined') return
+      document.body.style.overflow = ''
+    },
     handleConfirm: function () {
       this.$emit('confirm')
       this.$emit('update:visible', false)
@@ -101,7 +148,11 @@ export default {
 <style scoped>
 .confirm-modal-root {
   position: fixed;
-  inset: 0;
+  /* Chrome 66: inset 미지원 → top/right/bottom/left 사용 */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 10050;
   display: flex;
   align-items: center;
@@ -112,7 +163,10 @@ export default {
 
 .confirm-modal-backdrop {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: rgba(0, 0, 0, 0.5);
 }
 

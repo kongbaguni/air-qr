@@ -1,32 +1,52 @@
+import { FORCE_QR_MATCH_MODE } from '@/config/facilityCsv.config'
 import { getFacilitySiteMgmtNo } from '@/utils/facilityCsv'
 import { normalizeText } from '@/utils/qrMatcher'
 
 var MATCH_MODE_SITE_MGMT = 'siteMgmtNo'
 var MATCH_MODE_SPEC_NAME = 'specName'
+var MATCH_MODE_SOU_ID = 'souId'
 var NATIVE_KEY_SITE_MGMT = '현장관리번호'
 var NATIVE_KEY_SPEC_NAME = '시설명칭'
+var NATIVE_KEY_SOU_ID = 'SOU_ID'
 
 function detectMatchMode(records) {
-  var withSite = 0
-  var withName = 0
-  var i
+  // [이번 빌드] SOU_ID + qrcode 매칭 고정 (facilityCsv.config.js FORCE_QR_MATCH_MODE)
+  if (FORCE_QR_MATCH_MODE) return FORCE_QR_MATCH_MODE
 
-  for (i = 0; i < (records || []).length; i += 1) {
-    if (getFacilitySiteMgmtNo(records[i])) withSite += 1
-    if (getFacilitySpecName(records[i])) withName += 1
-  }
+  // 기존: CSV 컬럼 유무로 현장관리번호 vs 시설명칭 자동 감지
+  // var withSite = 0
+  // var withName = 0
+  // var i
+  //
+  // for (i = 0; i < (records || []).length; i += 1) {
+  //   if (getFacilitySiteMgmtNo(records[i])) withSite += 1
+  //   if (getFacilitySpecName(records[i])) withName += 1
+  // }
+  //
+  // if (withSite === 0 && withName > 0) return MATCH_MODE_SPEC_NAME
+  // return MATCH_MODE_SITE_MGMT
 
-  if (withSite === 0 && withName > 0) return MATCH_MODE_SPEC_NAME
-  return MATCH_MODE_SITE_MGMT
+  return MATCH_MODE_SOU_ID
 }
 
 function getCatalogMatchMode(catalog) {
-  if (!catalog) return MATCH_MODE_SITE_MGMT
-  return catalog.matchMode || MATCH_MODE_SITE_MGMT
+  if (FORCE_QR_MATCH_MODE) return FORCE_QR_MATCH_MODE
+  if (!catalog) return MATCH_MODE_SOU_ID
+  return catalog.matchMode || MATCH_MODE_SOU_ID
 }
 
 function getNativeKeyField(matchMode) {
-  return matchMode === MATCH_MODE_SPEC_NAME ? NATIVE_KEY_SPEC_NAME : NATIVE_KEY_SITE_MGMT
+  // [이번 빌드] 네이티브 저장 키 = SOU_ID
+  if (matchMode === MATCH_MODE_SOU_ID || FORCE_QR_MATCH_MODE) return NATIVE_KEY_SOU_ID
+
+  // 기존: 시설명칭 또는 현장관리번호
+  // return matchMode === MATCH_MODE_SPEC_NAME ? NATIVE_KEY_SPEC_NAME : NATIVE_KEY_SITE_MGMT
+
+  return NATIVE_KEY_SOU_ID
+}
+
+function getFacilitySouId(f) {
+  return pickField(f, ['SOU_ID'])
 }
 
 function getFacilityStorageKey(facility, catalogOrMode) {
@@ -35,11 +55,20 @@ function getFacilityStorageKey(facility, catalogOrMode) {
       ? catalogOrMode
       : getCatalogMatchMode(catalogOrMode)
 
-  if (mode === MATCH_MODE_SPEC_NAME) {
-    return getFacilitySpecName(facility) || String((facility && facility.id) || '').trim()
+  // [이번 빌드] QR 매칭·네이티브 저장 키 = SOU_ID
+  if (mode === MATCH_MODE_SOU_ID) {
+    return getFacilitySouId(facility) || String((facility && facility.id) || '').trim()
   }
 
-  return getFacilitySiteMgmtNo(facility) || String((facility && facility.id) || '').trim()
+  // 기존: 시설명칭 기준 매칭
+  // if (mode === MATCH_MODE_SPEC_NAME) {
+  //   return getFacilitySpecName(facility) || String((facility && facility.id) || '').trim()
+  // }
+  //
+  // 기존: 현장관리번호 기준 매칭
+  // return getFacilitySiteMgmtNo(facility) || String((facility && facility.id) || '').trim()
+
+  return getFacilitySouId(facility) || String((facility && facility.id) || '').trim()
 }
 
 function getMappingStorageKey(mapping) {
@@ -47,12 +76,18 @@ function getMappingStorageKey(mapping) {
   if (mapping.matchKey != null && String(mapping.matchKey).trim() !== '') {
     return String(mapping.matchKey).trim()
   }
-  if (mapping.matchMode === MATCH_MODE_SPEC_NAME && mapping.facilityName) {
-    return String(mapping.facilityName).trim()
+  // [이번 빌드] SOU_ID 매칭
+  if (mapping.matchMode === MATCH_MODE_SOU_ID && mapping.facilityNumber) {
+    return String(mapping.facilityNumber).trim()
   }
-  if (mapping.siteMgmtNo != null && String(mapping.siteMgmtNo).trim() !== '') {
-    return String(mapping.siteMgmtNo).trim()
-  }
+  // 기존: 시설명칭 매칭
+  // if (mapping.matchMode === MATCH_MODE_SPEC_NAME && mapping.facilityName) {
+  //   return String(mapping.facilityName).trim()
+  // }
+  // 기존: 현장관리번호 매칭
+  // if (mapping.siteMgmtNo != null && String(mapping.siteMgmtNo).trim() !== '') {
+  //   return String(mapping.siteMgmtNo).trim()
+  // }
   return String(mapping.facilityId || '').trim()
 }
 
@@ -203,6 +238,7 @@ function buildSearchKeys(facility) {
 function buildFacilityCatalog(records) {
   var list = freezeFacilityList(records || [])
   var byId = Object.create(null)
+  var bySouId = Object.create(null)
   var bySpecName = Object.create(null)
   var f1Set = {}
   var f2ByF1 = Object.create(null)
@@ -214,6 +250,7 @@ function buildFacilityCatalog(records) {
   var facility
   var id
   var specName
+  var souId
   var f1
   var f2
   var f3
@@ -233,6 +270,9 @@ function buildFacilityCatalog(records) {
       bySpecName[specName].push(facility)
     }
 
+    souId = getFacilitySouId(facility)
+    if (souId) bySouId[souId] = facility
+
     f1 = getFacilityF1(facility)
     f2 = getFacilityF2(facility)
     f3 = getFacilityF3(facility)
@@ -251,6 +291,7 @@ function buildFacilityCatalog(records) {
   return {
     list: list,
     byId: byId,
+    bySouId: bySouId,
     bySpecName: bySpecName,
     searchById: searchById,
     matchMode: matchMode,
@@ -603,16 +644,27 @@ function getFacilityDisplayLocation(facility) {
 function resolveFacilityForMapping(catalog, mapping) {
   if (!catalog || !mapping) return null
   var byId = catalog.byId || Object.create(null)
+  var bySouId = catalog.bySouId || Object.create(null)
+  var matchMode = getCatalogMatchMode(catalog)
   var keys = [
     mapping.matchKey,
-    mapping.siteMgmtNo,
-    mapping.facilityId,
     mapping.facilityNumber,
+    mapping.facilityId,
+    mapping.siteMgmtNo,
     mapping.facilityName
   ]
   var i
   var key
 
+  // [이번 빌드] SOU_ID + qrcode 매칭 — 네이티브/시드 복원 시 SOU_ID로 시설 연결
+  if (matchMode === MATCH_MODE_SOU_ID) {
+    for (i = 0; i < keys.length; i += 1) {
+      key = keys[i] != null ? String(keys[i]).trim() : ''
+      if (key && bySouId[key]) return bySouId[key]
+    }
+  }
+
+  // 기존: facility.id(현장관리번호 등)로 연결
   for (i = 0; i < keys.length; i += 1) {
     key = keys[i] != null ? String(keys[i]).trim() : ''
     if (key && byId[key]) return byId[key]
@@ -674,8 +726,10 @@ function hydrateMappingsWithCatalog(catalog, mappings) {
 export {
   MATCH_MODE_SITE_MGMT,
   MATCH_MODE_SPEC_NAME,
+  MATCH_MODE_SOU_ID,
   NATIVE_KEY_SITE_MGMT,
   NATIVE_KEY_SPEC_NAME,
+  NATIVE_KEY_SOU_ID,
   detectMatchMode,
   getCatalogMatchMode,
   getNativeKeyField,
@@ -713,6 +767,7 @@ export {
   getFacilityL7,
   getFacilitySpecName,
   getFacilitySpecNumber,
+  getFacilitySouId,
   isClassifiedFilterValue,
   matchesFLevelBefore,
   matchesLChainBeforeLevel,

@@ -1,12 +1,15 @@
 import { getFacilitySiteMgmtNo } from '@/utils/facilityCsv'
+import { FORCE_QR_MATCH_MODE } from '@/config/facilityCsv.config'
 import {
   getCatalogMatchMode,
+  getFacilitySouId,
   getFacilitySpecName,
   getFacilitySpecNumber,
   getFacilityDisplayCategory,
   getFacilityDisplayLocation,
   getMappingStorageKey,
   getNativeKeyField,
+  MATCH_MODE_SOU_ID,
   MATCH_MODE_SPEC_NAME
 } from '@/utils/facilityIndex'
 import {
@@ -28,7 +31,123 @@ import {
 } from '@/utils/qrMatcher'
 
 var QR_AUTHOR = 'qr-matcher'
+var DEV_STORAGE_KEY = 'qr-matcher:dev-stored-mappings'
+var DEV_MOCK_QR_CODE = 'IFAC_DEV_DELETE_TEST'
 var callbackSeq = 0
+
+function canUseDevStorage() {
+  return !isNativeBridgeAvailable() && typeof window !== 'undefined' && !!window.localStorage
+}
+
+function readDevMappingsRaw() {
+  if (!canUseDevStorage()) return null
+  try {
+    var raw = window.localStorage.getItem(DEV_STORAGE_KEY)
+    if (!raw) return null
+    var parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : null
+  } catch (e) {
+    return null
+  }
+}
+
+function writeDevMappingsRaw(mappings) {
+  if (!canUseDevStorage()) return
+  window.localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(mappings || []))
+}
+
+function reviveStoredMapping(mapping) {
+  if (!mapping) return null
+  var qr = mapping.qr
+  if (!qr || typeof qr !== 'object') {
+    qr = parseQrInput(mapping.qrcode || mapping.qrCode || '')
+  } else if (!qr.code && qr.raw) {
+    qr = parseQrInput(qr.raw)
+  }
+  return Object.assign({}, mapping, { qr: qr })
+}
+
+function createDevMockMapping(catalogOrFacilities) {
+  var catalog = resolveCatalog(catalogOrFacilities)
+  var facilities = catalog.list || []
+  var facility = null
+  var i
+  var parsedQr = parseQrInput(DEV_MOCK_QR_CODE)
+  var savedAt = formatKstDateTime()
+
+  for (i = 0; i < facilities.length; i += 1) {
+    if (getFacilitySouId(facilities[i])) {
+      facility = facilities[i]
+      break
+    }
+  }
+  if (!facility && facilities.length) facility = facilities[0]
+
+  if (facility) {
+    return Object.assign(createMapping(facility, parsedQr, catalog), {
+      facilityName: '[목데이터] ' + (getFacilitySpecName(facility) || '삭제 테스트'),
+      updatedAt: savedAt,
+      dateTime: savedAt,
+      isDevMock: true
+    })
+  }
+
+  return {
+    facilityId: 'DEV-MOCK-FACILITY',
+    siteMgmtNo: '',
+    matchKey: 'DEV-MOCK-SOU-ID',
+    matchMode: getCatalogMatchMode(catalog),
+    facilityName: '[목데이터] 삭제 테스트 시설',
+    facilityNumber: 'DEV-MOCK-SOU-ID',
+    category: '테스트',
+    location: '브라우저 확인용',
+    qr: parsedQr,
+    updatedAt: savedAt,
+    dateTime: savedAt,
+    isDevMock: true
+  }
+}
+
+function loadDevMappings(catalogOrFacilities) {
+  var stored = readDevMappingsRaw()
+  var list = []
+  var i
+
+  if (stored) {
+    for (i = 0; i < stored.length; i += 1) {
+      list.push(reviveStoredMapping(stored[i]))
+    }
+    return sortMappingsByRecent(list.filter(Boolean))
+  }
+
+  list = [createDevMockMapping(catalogOrFacilities)]
+  writeDevMappingsRaw(list)
+  return list
+}
+
+function saveDevMappings(mappings) {
+  writeDevMappingsRaw(mappings || [])
+}
+
+function deleteDevMapping(mapping) {
+  var current = readDevMappingsRaw() || []
+  var targetQr = getQrStoredValue(mapping && mapping.qr)
+  var targetFacilityId = mapping && mapping.facilityId
+  var next = []
+
+  for (var i = 0; i < current.length; i += 1) {
+    var item = reviveStoredMapping(current[i])
+    if (!item) continue
+    if (targetFacilityId && item.facilityId !== targetFacilityId) {
+      next.push(item)
+      continue
+    }
+    if (getQrStoredValue(item.qr) !== targetQr) next.push(item)
+  }
+
+  saveDevMappings(next)
+  return next
+}
 
 function nextCallbackName(prefix) {
   callbackSeq += 1
@@ -95,18 +214,21 @@ function buildFacilityIndex(facilities) {
   var index = {}
   var i
   var facility
-  var siteMgmtNo
+  // var siteMgmtNo
 
   for (i = 0; i < (facilities || []).length; i += 1) {
     facility = facilities[i]
-    siteMgmtNo = getFacilitySiteMgmtNo(facility)
-    indexFacilityKey(index, facility, siteMgmtNo)
-    indexFacilityKey(index, facility, getFacilitySpecName(facility))
-    indexFacilityKey(index, facility, facility.id)
-    indexFacilityKey(index, facility, getFacilitySpecNumber(facility))
-    indexFacilityKey(index, facility, facility.eqNo)
+    // [이번 빌드] 네이티브 keyValue(SOU_ID) → 시설 조회용 인덱스
+    indexFacilityKey(index, facility, getFacilitySouId(facility))
     indexFacilityKey(index, facility, facility['SOU_ID'])
-    indexFacilityKey(index, facility, facility['SOU_ID_임시시설번호'])
+    indexFacilityKey(index, facility, getFacilitySpecNumber(facility))
+    indexFacilityKey(index, facility, facility.id)
+    indexFacilityKey(index, facility, facility.eqNo)
+    // 기존: 현장관리번호·시설명칭 기준 인덱스
+    // siteMgmtNo = getFacilitySiteMgmtNo(facility)
+    // indexFacilityKey(index, facility, siteMgmtNo)
+    // indexFacilityKey(index, facility, getFacilitySpecName(facility))
+    // indexFacilityKey(index, facility, facility['SOU_ID_임시시설번호'])
   }
 
   return index
@@ -116,7 +238,9 @@ function resolveCatalog(catalogOrFacilities) {
   if (catalogOrFacilities && catalogOrFacilities.list) return catalogOrFacilities
   return {
     list: catalogOrFacilities || [],
-    matchMode: 'siteMgmtNo'
+    // [이번 빌드] SOU_ID + qrcode
+    matchMode: FORCE_QR_MATCH_MODE || MATCH_MODE_SOU_ID
+    // 기존: matchMode: 'siteMgmtNo'
   }
 }
 
@@ -204,14 +328,23 @@ function nativeRecordsToMappings(records, catalogOrFacilities) {
   for (i = 0; i < (records || []).length; i += 1) {
     record = records[i] || {}
     keyValue = String(record.keyValue || record.sn || '').trim()
+    // [이번 빌드] 네이티브 key=SOU_ID, keyValue=SOU_ID 값으로 시설 매칭
     recordMatchMode =
-      record.key === '시설명칭' ? MATCH_MODE_SPEC_NAME : matchMode
+      record.key === 'SOU_ID'
+        ? MATCH_MODE_SOU_ID
+        : record.key === '시설명칭'
+          ? MATCH_MODE_SPEC_NAME
+          : matchMode
     facility = facilityIndex[keyValue] || null
     parsedQr = parseQrInput(record.qrcode)
 
     list.push({
       facilityId: facility ? facility.id : keyValue,
-      siteMgmtNo: recordMatchMode === MATCH_MODE_SPEC_NAME ? '' : keyValue,
+      siteMgmtNo:
+        recordMatchMode === MATCH_MODE_SPEC_NAME || recordMatchMode === MATCH_MODE_SOU_ID
+          ? ''
+          : keyValue,
+      // 기존: siteMgmtNo: recordMatchMode === MATCH_MODE_SPEC_NAME ? '' : keyValue,
       matchKey: keyValue,
       matchMode: recordMatchMode,
       nativeId: record.id ? String(record.id) : '',
@@ -239,7 +372,7 @@ function normalizeNativeRecords(payload) {
 function loadQrMappingsFromNative(catalogOrFacilities) {
   return new Promise(function(resolve, reject) {
     if (!isNativeBridgeAvailable()) {
-      reject(new Error('Native bridge unavailable'))
+      resolve(loadDevMappings(catalogOrFacilities))
       return
     }
 
@@ -263,6 +396,12 @@ function loadQrMappingsFromNative(catalogOrFacilities) {
 function loadMergedMappings(catalogOrFacilities) {
   var catalog = resolveCatalog(catalogOrFacilities)
 
+  if (!isNativeBridgeAvailable()) {
+    return Promise.resolve(
+      mergeMappings(createSeedMappings(catalog.list, catalog), loadDevMappings(catalog))
+    )
+  }
+
   return loadQrMappingsFromNative(catalog).then(function(storedMappings) {
     return mergeMappings(createSeedMappings(catalog.list, catalog), storedMappings)
   })
@@ -272,7 +411,9 @@ function saveQrMappingsToNative(mappings) {
   return new Promise(function(resolve, reject) {
     var list = mappings || []
     var savedAt = formatKstDateTime()
-    var matchMode = list.length ? list[0].matchMode || 'siteMgmtNo' : 'siteMgmtNo'
+    var matchMode = list.length
+      ? list[0].matchMode || MATCH_MODE_SOU_ID
+      : MATCH_MODE_SOU_ID
     var nativeList = dedupeMappingsForNativeSave(list, matchMode)
     var i
     var mapping
@@ -292,7 +433,9 @@ function saveQrMappingsToNative(mappings) {
           new Error(
             matchMode === MATCH_MODE_SPEC_NAME
               ? '시설명칭이 없어 저장할 수 없습니다.'
-              : '현장관리번호가 없어 저장할 수 없습니다.'
+              : matchMode === MATCH_MODE_SOU_ID
+                ? 'SOU_ID가 없어 저장할 수 없습니다.'
+                : '현장관리번호가 없어 저장할 수 없습니다.'
           )
         )
         return
@@ -310,6 +453,14 @@ function saveQrMappingsToNative(mappings) {
     for (i = 0; i < list.length; i += 1) {
       list[i].dateTime = savedAt
       list[i].updatedAt = savedAt
+    }
+
+    if (!isNativeBridgeAvailable()) {
+      var stored = loadDevMappings()
+      var merged = mergeMappings(stored, list)
+      saveDevMappings(merged)
+      resolve(list)
+      return
     }
 
     callNativeWithCallback(
@@ -333,7 +484,7 @@ function saveQrMappingToNative(mapping) {
 
 function deleteQrMappingFromNative(mapping) {
   return new Promise(function(resolve, reject) {
-    var matchMode = (mapping && mapping.matchMode) || 'siteMgmtNo'
+    var matchMode = (mapping && mapping.matchMode) || MATCH_MODE_SOU_ID
     var payload = buildNativeQrPayload(mapping, matchMode)
 
     if (mapping.nativeId) {
@@ -345,7 +496,9 @@ function deleteQrMappingFromNative(mapping) {
         new Error(
           matchMode === MATCH_MODE_SPEC_NAME
             ? '시설명칭이 없어 삭제할 수 없습니다.'
-            : '현장관리번호가 없어 삭제할 수 없습니다.'
+            : matchMode === MATCH_MODE_SOU_ID
+              ? 'SOU_ID가 없어 삭제할 수 없습니다.'
+              : '현장관리번호가 없어 삭제할 수 없습니다.'
         )
       )
       return
@@ -353,6 +506,12 @@ function deleteQrMappingFromNative(mapping) {
 
     if (!payload.qrcode) {
       reject(new Error('QR 원문이 없어 삭제할 수 없습니다.'))
+      return
+    }
+
+    if (!isNativeBridgeAvailable()) {
+      deleteDevMapping(mapping)
+      resolve(true)
       return
     }
 

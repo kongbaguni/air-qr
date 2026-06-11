@@ -7,6 +7,13 @@
  * - 새 포맷: FACILITY_CSV_FIELD_ALIASES 에 헤더명만 배열로 추가
  */
 
+/**
+ * [이번 빌드] QR 네이티브 매칭 기준: SOU_ID + qrcode
+ * 기존: 현장관리번호(siteMgmtNo) 또는 시설명칭(specName) + qrcode (자동 감지)
+ * 시설 목록 검색(이름·현장관리번호)은 이 설정과 무관하게 유지
+ */
+export var FORCE_QR_MATCH_MODE = 'souId'
+
 /** public/ 아래 파일명 */
 export var DEFAULT_FACILITY_CSV =
   typeof process !== 'undefined' && process.env && process.env.VUE_APP_FACILITY_CSV
