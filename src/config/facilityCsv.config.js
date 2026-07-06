@@ -18,7 +18,7 @@ export var FORCE_QR_MATCH_MODE = 'souId'
 export var DEFAULT_FACILITY_CSV =
   typeof process !== 'undefined' && process.env && process.env.VUE_APP_FACILITY_CSV
     ? String(process.env.VUE_APP_FACILITY_CSV).trim()
-    : '003.csv'
+    : '010.csv'
 
 /**
  * 논리 필드 → CSV 헤더 후보 (앞쪽 우선, 002·003·추가 포맷 공통)

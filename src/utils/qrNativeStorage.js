@@ -33,6 +33,7 @@ import {
 var QR_AUTHOR = 'qr-matcher'
 var DEV_STORAGE_KEY = 'qr-matcher:dev-stored-mappings'
 var DEV_MOCK_QR_CODE = 'IFAC_DEV_DELETE_TEST'
+var QR_MAPPINGS_CHANGED_EVENT = 'qr-mappings-changed'
 var callbackSeq = 0
 
 function canUseDevStorage() {
@@ -54,6 +55,11 @@ function readDevMappingsRaw() {
 function writeDevMappingsRaw(mappings) {
   if (!canUseDevStorage()) return
   window.localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(mappings || []))
+}
+
+function notifyQrMappingsChanged() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event(QR_MAPPINGS_CHANGED_EVENT))
 }
 
 function reviveStoredMapping(mapping) {
@@ -459,6 +465,7 @@ function saveQrMappingsToNative(mappings) {
       var stored = loadDevMappings()
       var merged = mergeMappings(stored, list)
       saveDevMappings(merged)
+      notifyQrMappingsChanged()
       resolve(list)
       return
     }
@@ -467,6 +474,7 @@ function saveQrMappingsToNative(mappings) {
       'saveQRData',
       buildNativeSaveQrRequestPayload(list, matchMode),
       function() {
+        notifyQrMappingsChanged()
         resolve(list)
       },
       function(error) {
@@ -511,6 +519,7 @@ function deleteQrMappingFromNative(mapping) {
 
     if (!isNativeBridgeAvailable()) {
       deleteDevMapping(mapping)
+      notifyQrMappingsChanged()
       resolve(true)
       return
     }
@@ -519,6 +528,7 @@ function deleteQrMappingFromNative(mapping) {
       'deleteQRData',
       payload,
       function() {
+        notifyQrMappingsChanged()
         resolve(true)
       },
       function(error) {
@@ -549,11 +559,13 @@ function requestExportCsv() {
 
 export {
   QR_AUTHOR,
+  QR_MAPPINGS_CHANGED_EVENT,
   loadQrMappingsFromNative,
   loadMergedMappings,
   saveQrMappingsToNative,
   saveQrMappingToNative,
   deleteQrMappingFromNative,
   requestExportCsv,
-  createMappingForFacility
+  createMappingForFacility,
+  notifyQrMappingsChanged
 }

@@ -155,10 +155,11 @@ export default {
     }
   },
   mounted: function () {
-    var self = this
-    this.loadFacilityReference().finally(function () {
-      self.reloadSavedMappings()
-    })
+    this.attachMappingsRefreshListeners()
+    this.reloadSavedMappings()
+  },
+  beforeDestroy: function () {
+    this.detachMappingsRefreshListeners()
   },
   methods: {
     loadFacilityReference: function () {
@@ -178,24 +179,66 @@ export default {
           self.facilities = []
         })
     },
+    attachMappingsRefreshListeners: function () {
+      if (this._refreshListenersAttached || typeof window === 'undefined') return
+
+      this._refreshListenersAttached = true
+      this._handleMappingsChanged = this.handleMappingsChanged.bind(this)
+      this._handleVisibilityChange = this.handleVisibilityChange.bind(this)
+
+      window.addEventListener('qr-mappings-changed', this._handleMappingsChanged)
+      window.addEventListener('focus', this._handleMappingsChanged)
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', this._handleVisibilityChange)
+      }
+    },
+    detachMappingsRefreshListeners: function () {
+      if (!this._refreshListenersAttached || typeof window === 'undefined') return
+
+      this._refreshListenersAttached = false
+      if (this._handleMappingsChanged) {
+        window.removeEventListener('qr-mappings-changed', this._handleMappingsChanged)
+        window.removeEventListener('focus', this._handleMappingsChanged)
+      }
+      if (this._handleVisibilityChange && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', this._handleVisibilityChange)
+      }
+    },
+    handleMappingsChanged: function () {
+      this.reloadSavedMappings()
+    },
+    handleVisibilityChange: function () {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        this.reloadSavedMappings()
+      }
+    },
     reloadSavedMappings: function () {
       var self = this
+      var loadFacilitiesPromise = this.facilities.length
+        ? Promise.resolve()
+        : this.loadFacilityReference()
 
       this.reloading = true
       this.reloadError = ''
-      loadQrMappingsFromNative(this.facilities)
-        .then(function (mappings) {
-          var catalog = getFacilityCatalog()
-          self.mappings = catalog
-            ? hydrateMappingsWithCatalog(catalog, mappings)
-            : mappings
-          self.reloadMessage = '기기 QR 저장소에서 저장된 매칭을 다시 불러왔습니다.'
-        })
+      loadFacilitiesPromise
         .catch(function () {
-          self.reloadError = '저장된 QR 매칭을 불러오지 못했습니다.'
+          return null
         })
         .finally(function () {
-          self.reloading = false
+          loadQrMappingsFromNative(self.facilities)
+            .then(function (mappings) {
+              var catalog = getFacilityCatalog()
+              self.mappings = catalog
+                ? hydrateMappingsWithCatalog(catalog, mappings)
+                : mappings
+              self.reloadMessage = '기기 QR 저장소에서 저장된 매칭을 다시 불러왔습니다.'
+            })
+            .catch(function () {
+              self.reloadError = '저장된 QR 매칭을 불러오지 못했습니다.'
+            })
+            .finally(function () {
+              self.reloading = false
+            })
         })
     },
     formatUpdatedAt: function (value) {

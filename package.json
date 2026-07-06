@@ -13,6 +13,7 @@
     "facility-csv": "node scripts/facility-csv.js",
     "//facility-csv": "pnpm facility-csv list  → 사용 가능 CSV 목록",
     "build:modern": "vue-cli-service build",
+    "build:csv:deploy": "node scripts/copy-dist.js",
     "lint": "vue-cli-service lint",
     "lint:fix": "vue-cli-service lint --fix",
     "format": "prettier --write \"src/**/*.{js,vue,json}\""
