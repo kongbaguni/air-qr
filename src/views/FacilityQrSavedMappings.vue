@@ -17,6 +17,13 @@
         </div>
       </div>
 
+      <div v-if="reloading" class="saved-loading-overlay" aria-hidden="false">
+        <div class="saved-loading-overlay-backdrop"></div>
+        <div class="saved-loading-overlay-content">
+          <div class="saved-loading-spinner"></div>
+          <p class="saved-loading-text">저장된 매칭을 불러오는 중입니다…</p>
+        </div>
+      </div>
       <p class="summary-line">
         기기 QR 저장소에서 <strong>{{ mappings.length }}</strong>건을 불러왔습니다.
         <template v-if="selectedDateKey">
@@ -320,6 +327,7 @@ export default {
 }
 
 .panel-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -461,6 +469,60 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.saved-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.saved-loading-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.saved-loading-overlay-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 28px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+}
+
+.saved-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(37, 99, 235, 0.18);
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: saved-spinner 0.9s linear infinite;
+}
+
+.saved-loading-text {
+  margin: 0;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@keyframes saved-spinner {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .empty-list {
