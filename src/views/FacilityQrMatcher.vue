@@ -361,6 +361,10 @@
       </section>
     </section>
 
+    <footer class="app-version-footer">
+      <span class="app-version-text">v1.0.0</span>
+    </footer>
+
     <ScrollTopButton scroll-container=".matcher-page" />
 
     <ConfirmModal
@@ -1314,6 +1318,21 @@ export default {
   color: #18181b;
 }
 
+.app-version-footer {
+  text-align: center;
+  padding: 16px 0;
+  margin-top: 12px;
+  border-top: 1px solid #e4e4e7;
+  color: #71717a;
+  font-size: 12px;
+}
+
+.app-version-text {
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
 .panel-card {
   border: 1px solid #e4e4e7;
   border-radius: 24px;
@@ -2017,6 +2036,11 @@ export default {
 
   .mapping-actions {
     flex-direction: row;
+  }
+
+  .app-version-footer {
+    text-align: center;
+    padding: 12px;
   }
 }
 </style>

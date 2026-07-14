@@ -3,7 +3,7 @@
  *
  * - CSV 교체: pnpm dev:csv 005 / pnpm build:csv 005 (public/NNN.csv 추가만 하면 됨)
  * - 005 등 현장관리번호 없는 CSV: 시설명칭(EQ_NM)으로 QR 매칭 (자동 감지)
- * - 또는: DEFAULT_FACILITY_CSV 변경, VUE_APP_FACILITY_CSV 환경변수
+ * - 또는: DEFAULT_FACILITY_CSV 변경, VUE_APP_FACILITY_CSV 환경변수, 빌드 인자
  * - 새 포맷: FACILITY_CSV_FIELD_ALIASES 에 헤더명만 배열로 추가
  */
 
@@ -14,11 +14,26 @@
  */
 export var FORCE_QR_MATCH_MODE = 'souId'
 
+function normalizeFacilityCsvName(value) {
+  if (typeof value !== 'string') return ''
+
+  var trimmed = value.trim()
+  if (!trimmed) return ''
+
+  return trimmed.endsWith('.csv') ? trimmed : trimmed + '.csv'
+}
+
 /** public/ 아래 파일명 */
 export var DEFAULT_FACILITY_CSV =
-  typeof process !== 'undefined' && process.env && process.env.VUE_APP_FACILITY_CSV
-    ? String(process.env.VUE_APP_FACILITY_CSV).trim()
-    : '010.csv'
+  typeof process !== 'undefined' && process.env
+    ? normalizeFacilityCsvName(
+        process.env.VUE_APP_FACILITY_CSV || process.env.FACILITY_CSV_NAME || ''
+      )
+    : ''
+
+if (!DEFAULT_FACILITY_CSV) {
+  DEFAULT_FACILITY_CSV = '003.csv'
+}
 
 /**
  * 논리 필드 → CSV 헤더 후보 (앞쪽 우선, 002·003·추가 포맷 공통)

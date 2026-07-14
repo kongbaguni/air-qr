@@ -28,6 +28,10 @@ function isNativeBridgeAvailable() {
   return false
 }
 
+function isNativeRoomSearchAvailable() {
+  return isNativeBridgeAvailable()
+}
+
 function callNative(handlerName, callBackFuncStr, payload) {
   var param = {
     interfaceId: handlerName,
@@ -67,6 +71,33 @@ function callNative(handlerName, callBackFuncStr, payload) {
   }
 }
 
+function callNativePromise(handlerName, payload) {
+  return new Promise(function(resolve, reject) {
+    if (!isNativeBridgeAvailable()) {
+      reject(new Error('Native bridge unavailable'))
+      return
+    }
+
+    var callbackName = '__nativeCallback_' + handlerName + '_' + Date.now() + '_' + Math.floor(Math.random() * 10000) + '__'
+
+    window[callbackName] = function(result) {
+      try {
+        if (!isNativeSuccess(result)) {
+          reject(result || new Error(handlerName + ' failed'))
+          return
+        }
+        resolve(extractResponsePayload(result))
+      } finally {
+        if (window[callbackName]) {
+          delete window[callbackName]
+        }
+      }
+    }
+
+    callNative(handlerName, callbackName, payload)
+  })
+}
+
 function isNativeSuccess(result) {
   if (!result || typeof result !== 'object') return true
   if (Object.prototype.hasOwnProperty.call(result, 'isSucess')) {
@@ -84,6 +115,18 @@ function extractResponsePayload(result) {
     return result.responsePayload
   }
   return result
+}
+
+function queryFacilityCatalog(payload, callback) {
+  callNative('queryFacilityCatalog', callback || '', payload || {})
+}
+
+function getFacilityCatalogFilters(payload, callback) {
+  callNative('getFacilityCatalogFilters', callback || '', payload || {})
+}
+
+function syncFacilityCatalog(payload, callback) {
+  callNative('syncFacilityCatalog', callback || '', payload || {})
 }
 
 function qrScan(callback, title) {
@@ -126,10 +169,15 @@ export {
   isIOS,
   isAndroid,
   isNativeBridgeAvailable,
+  isNativeRoomSearchAvailable,
   callNative,
+  callNativePromise,
   isNativeSuccess,
   extractResponsePayload,
   qrScan,
+  queryFacilityCatalog,
+  getFacilityCatalogFilters,
+  syncFacilityCatalog,
   saveQRData,
   deleteQRData,
   loadQRData,

@@ -23,9 +23,13 @@ function listFacilityCsvs() {
     .sort()
 }
 
+function getDefaultCsvFromEnv() {
+  return process.env.VUE_APP_FACILITY_CSV || process.env.FACILITY_CSV_NAME || DEFAULT_CSV
+}
+
 function normalizeCsv(name) {
   if (name == null || String(name).trim() === '') {
-    return process.env.VUE_APP_FACILITY_CSV || DEFAULT_CSV
+    return getDefaultCsvFromEnv()
   }
   var n = String(name).trim()
   return n.endsWith('.csv') ? n : n + '.csv'
@@ -42,7 +46,10 @@ function ensureCsvExists(csvName) {
 }
 
 function runWithCsv(csvName, command, args) {
-  var env = Object.assign({}, process.env, { VUE_APP_FACILITY_CSV: csvName })
+  var env = Object.assign({}, process.env, {
+    VUE_APP_FACILITY_CSV: csvName,
+    FACILITY_CSV_NAME: csvName
+  })
   var result = spawnSync(command, args, {
     stdio: 'inherit',
     env: env,

@@ -3,8 +3,19 @@ const path = require('path')
 
 const distDir = path.join(__dirname, '../dist')
 const indexPath = path.join(distDir, 'index.html')
-/** src/config/facilityCsv.config.js 와 동일 — 빌드 시 VUE_APP_FACILITY_CSV 로 덮어쓸 수 있음 */
-const csvName = process.env.VUE_APP_FACILITY_CSV || '003.csv'
+function normalizeFacilityCsvName(value) {
+  if (typeof value !== 'string') return ''
+
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+
+  return trimmed.endsWith('.csv') ? trimmed : trimmed + '.csv'
+}
+
+/** src/config/facilityCsv.config.js 와 동일 — 빌드 시 환경변수/인자로 덮어쓸 수 있음 */
+const csvName = normalizeFacilityCsvName(
+  process.env.VUE_APP_FACILITY_CSV || process.env.FACILITY_CSV_NAME || '003.csv'
+)
 const csvPath = path.join(distDir, csvName)
 const bundlePath = path.join(distDir, 'js/facility-csv-data.js')
 const bundleScriptTag = '<script src="js/facility-csv-data.js"></script>'

@@ -1,6 +1,6 @@
 {
   "name": "icn-airport-sys-local2",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "//": "── 시설 QR CSV (public/NNN.csv 추가만, package.json 수정 불필요) ──",
