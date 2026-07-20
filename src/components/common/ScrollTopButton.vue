@@ -4,7 +4,7 @@
   @설명: 클릭 시 화면 최상단으로 이동
 -->
 <template>
-  <div class="fixed bottom-4 right-4">
+  <div class="fixed bottom-4 right-4" :style="{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }">
     <button
       class="w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center"
       @click="scrollToTop"

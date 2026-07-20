@@ -9,7 +9,7 @@
           </div>
           <div class="panel-header-actions">
             <router-link class="ghost-button" to="/saved-mappings">저장 목록</router-link>
-            <button class="accent-button" type="button" @click="startQrScan">네이티브 QR 스캔</button>
+            <!-- <button class="accent-button" type="button" @click="startQrScan">네이티브 QR 스캔</button> -->
           </div>
         </div>
 
@@ -48,9 +48,14 @@
           </div>
         </div>
 
-        <button class="save-button flow-save" type="button" :disabled="!canSaveMapping" @click="saveCurrentMapping">
-          {{ saveMappingButtonLabel }}
-        </button>
+        <div class="floating-actions-wrapper">
+          <button class="accent-button floating-save" type="button" @click="startQrScan">QR 스캔</button>
+          <hr />
+          <button class="save-button floating-save" type="button" :disabled="!canSaveMapping" @click="saveCurrentMapping">
+            {{ saveMappingButtonLabel }}
+          </button>
+
+        </div>
 
         <div class="conflict-box" v-if="facilityConflicts.length">
           <p v-for="conflict in facilityConflicts" :key="conflict.facilityId">
@@ -2042,5 +2047,53 @@ export default {
     text-align: center;
     padding: 12px;
   }
+
+  /* 1. 플로팅 버튼이 아래쪽 콘텐츠를 가리지 않도록 전체 페이지 하단 여백 확보 */
+.matcher-page {
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  padding-bottom: 100px; /* 플로팅 버튼 높이만큼 여백 추가 */
+  color: #18181b;
+}
+
+/* 2. 플로팅 버튼 기본 스타일 (데스크톱/기본 상태에서는 원래 흐름 유지 가능) */
+.floating-actions-wrapper {
+  width: 100%;
+  z-index: 50;
+}
+
+.floating-save {
+  width: 100%;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  transition: all 0.2s ease;
+}
+
+/* 3. 모바일 환경(768px 이하)에서 왼쪽 하단 고정 스펙 적용 */
+@media (max-width: 768px) {
+  .matcher-page {
+    padding: 12px;
+    padding-bottom: 92px; /* 모바일 전용 하단 여백 조정 */
+  }
+
+  .floating-actions-wrapper {
+    position: fixed;
+    bottom: env(safe-area-inset-bottom, 16px);
+    left: 16px;         /* 왼쪽 고정 */
+    right: auto;        /* 우측 자동 처리로 왼쪽 정렬 보장 */
+    width: calc(100% - 32px); /* 양쪽 여백을 제외한 너비 */
+    max-width: 280px;   /* 지나치게 길어지지 않도록 모바일 왼쪽 한켠에 들어오는 적정 너비 제한 */
+    pointer-events: none; /* 컨테이너 자체는 터치를 통과시킴 */
+  }
+
+  .floating-save {
+    pointer-events: auto; /* 버튼만 터치 가능하게 복구 */
+    padding: 16px 20px;   /* 모바일에서 누르기 좋게 터치 영역 확대 */
+    font-size: 15px;      /* 시인성을 위한 폰트 스케일 업 */
+    border-radius: 16px;  /* 둥근 사각형 아이덴티티 유지 */
+    box-shadow: 0 8px 32px rgba(37, 99, 235, 0.24); /* 플로팅 느낌 강조 */
+  }
+}
 }
 </style>

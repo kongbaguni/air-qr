@@ -43,7 +43,7 @@ VUE_APP_FACILITY_CSV=010.csv pnpm build
 ### 배포용 dist 복사
 
 ```bash
-pnpm build:csv:deploy 010
+pnpm build:csv:deploy 008
 ```
 
 이 명령은 다음 과정을 자동으로 수행합니다.
